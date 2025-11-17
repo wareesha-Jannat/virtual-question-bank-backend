@@ -1,0 +1,30 @@
+# === Node / Dependencies ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# === Environment Variables ===
+.env
+.env.*
+!.env.example   # allow example env file to be committed
+
+# === Logs ===
+logs/
+*.log
+
+# === System Files ===
+.DS_Store
+Thumbs.db
+
+# === Build / Output (if you compile or bundle) ===
+build/
+dist/
+
+# === Coverage (if using Jest, nyc, etc.) ===
+coverage/
+
+# === Temporary ===
+.tmp/
+temp/
