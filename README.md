@@ -59,14 +59,13 @@ Handles user authentication, question management, exams, notifications, support 
 ```bash
 virtual-question-bank-backend/
 │
-├── src/
-│   ├── config/          # Database and environment setup
-│   ├── controllers/     # Route controllers (business logic)
-│   ├── models/          # Mongoose models
-│   ├── routes/          # API routes
-│   ├── middlewares/     # Auth, error handling, etc.
-│   ├── utils/           # Utility/helper functions
-│   └── server.js        # Main server entry point
+│── config/          # Database and environment setup
+│── controllers/     # Route controllers (business logic)
+│── models/          # Mongoose models
+│── routes/          # API routes
+│── middlewares/     # Auth, error handling, etc.
+│── utils/           # Utility/helper functions
+│── server.js        # Main server entry point
 │
 ├── .env.example         # Environment variables
 ├── package.json
