@@ -147,6 +147,7 @@ class UserController {
         message: "Login Successfull",
       });
     } catch (error) {
+    
       res.status(500).json({
         message: "Internal server error , unable to login please try again ",
       });

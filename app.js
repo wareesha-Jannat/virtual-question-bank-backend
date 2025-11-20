@@ -16,8 +16,6 @@ import cron from "node-cron";
 // Import the function to connect to the database
 import connectDb from "./config/connectDb.js";
 
-
-
 // Import User model
 import User from "./models/User.js";
 
@@ -42,6 +40,7 @@ const corsOptions = {
   origin: process.env.FRONTEND_HOST, // Allow requests from the frontend host
   credentials: true, // Allow credentials (cookies, headers)
   optionsSuccessStatus: 200, // Response status for successful preflight requests
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
 };
 
 // Apply CORS middleware with the configured options
