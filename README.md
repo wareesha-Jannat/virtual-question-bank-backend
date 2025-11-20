@@ -93,7 +93,7 @@ virtual-question-bank-backend/
 
 ```bash
 git clone https://github.com/wareesha-Jannat/virtual-question-bank-backend.git
-cd virtualquestionbank-backend
+cd virtual-question-bank-backend
 
 ```
 

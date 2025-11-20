@@ -13,7 +13,7 @@ let opts = {
 };
 
 // Using the JwtStrategy to authenticate users based on the JWT token
-console.log("JWT ACCESS=", process.env.JWT_ACCESS_TOKEN_SECRET_KEY);
+
 passport.use(
   new JwtStrategy(opts, async function (jwt_payload, done) {
     try {

@@ -6,11 +6,17 @@ import express from "express";
 const app = express();
 import cookieParser from "cookie-parser";
 import passport from "passport";
+
+// Load Passport.js JWT strategy for authentication
+import "./config/passport-jwt-strategy.js";
+
 import cors from "cors";
 import cron from "node-cron";
 
 // Import the function to connect to the database
 import connectDb from "./config/connectDb.js";
+
+
 
 // Import User model
 import User from "./models/User.js";
@@ -26,9 +32,6 @@ import AnalyticsAndReportingRouter from "./routes/analyticsAndReporting.js";
 import ResultRouter from "./routes/results.js";
 import SupportRequestRouter from "./routes/supportRequests.js";
 import ExamSessionRouter from "./routes/examSessions.js";
-
-// Load Passport.js JWT strategy for authentication
-import "./config/passport-jwt-strategy.js";
 
 // Set up the server port and database URL from environment variables
 const port = process.env.PORT;
