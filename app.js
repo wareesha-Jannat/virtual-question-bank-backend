@@ -25,7 +25,7 @@ import SupportRequestRouter from "./routes/supportRequests.js";
 import ExamSessionRouter from "./routes/examSessions.js";
 
 const app = express();
-const port = process.env.PORT;
+const port = process.env.PORT || 5000;
 const DATABASE_URL = process.env.DB_URL;
 
 const allowedOrigin =
@@ -74,8 +74,11 @@ app.use("/analyticsAndReporting", AnalyticsAndReportingRouter);
 app.use("/dashboard", DashboardRouter);
 app.use("/results", ResultRouter);
 app.use("/support", SupportRequestRouter);
+app.get("/", (req, res) => {
+  res.send("Backend is running 🚀");
+});
 
 // ==================== Start Server ====================
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on port ${port}`);
 });
