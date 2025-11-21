@@ -70,7 +70,7 @@ class UserController {
       await activity.save();
 
       res.status(201).json({
-        success: false,
+        success: true,
         message: "User Registered Successfully",
       });
     } catch (error) {
@@ -104,7 +104,7 @@ class UserController {
       //updating last Login field
       user.lastLogin = new Date();
       user.isActive = true; // Set isActive to true on login
-      user.save();
+      await user.save();
 
       //Check password
       const isMatch = await bcrypt.compare(password, user.password);
@@ -147,7 +147,6 @@ class UserController {
         message: "Login Successfull",
       });
     } catch (error) {
-    
       res.status(500).json({
         message: "Internal server error , unable to login please try again ",
       });
