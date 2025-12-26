@@ -64,8 +64,31 @@ class SubjectController {
 
   static getSubjects = async (req, res) => {
     try {
-      const result = await Subject.find();
-      res.status(200).json(result);
+      const subjects = await Subject.aggregate([
+        {
+          $lookup: {
+            from: "topics", // collection name in MongoDB
+            localField: "_id",
+            foreignField: "subjectId",
+            as: "topics",
+          },
+        },
+        {
+          $addFields: {
+            topicCount: { $size: "$topics" }, // count topics
+          },
+        },
+        {
+          $sort: { topicCount: -1 }, // most topics first
+        },
+        {
+          $project: {
+            topics: 0, // exclude topics array
+          },
+        },
+      ]);
+
+      res.status(200).json(subjects);
     } catch (err) {
       res.status(500).json({
         message: "Could not get subjects, internal server error",
@@ -99,8 +122,6 @@ class SubjectController {
       await Topic.deleteMany({ subjectId: subjectId });
       await Question.deleteMany({ subjectId: subjectId });
 
-       
-
       //store activity
       const activity = new Activity({
         user: req.user._id,
@@ -113,7 +134,7 @@ class SubjectController {
       res.status(200).json({
         message:
           "Subject its topics and related questions are deleted Successfully",
-      deleteSubjectId : subject._id
+        deleteSubjectId: subject._id,
       });
     } catch (err) {
       res.status(500).json({

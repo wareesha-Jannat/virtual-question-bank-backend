@@ -1,4 +1,4 @@
-import mongoose, { trusted } from "mongoose";
+import mongoose from "mongoose";
 
 const questionSchema = new mongoose.Schema(
   {
@@ -35,6 +35,10 @@ const questionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+questionSchema.index({ topicId: 1 });
+questionSchema.index({ subjectId: 1 });
+questionSchema.index({ subjectId: 1, topicId: 1 });
+
 const Question = mongoose.model("Question", questionSchema);
 
 export default Question;

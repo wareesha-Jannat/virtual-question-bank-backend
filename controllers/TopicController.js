@@ -16,13 +16,34 @@ class TopicController {
         });
       }
 
-      const topics = await Topic.find({ subjectId }).populate("subjectId");
+      let topics = await Topic.find({ subjectId }).populate("subjectId").lean();
 
-      if (!topics) {
-        res.status(404).json({
-          message: "No topics found for this subject",
-        });
+      if (!topics || topics.length === 0) {
+        return res
+          .status(404)
+          .json({ message: "No topics found for this subject" });
       }
+
+      // 2. Count questions for each topic
+      const topicIds = topics.map((t) => t._id);
+      const questionCounts = await Question.aggregate([
+        { $match: { topicId: { $in: topicIds } } },
+        { $group: { _id: "$topicId", count: { $sum: 1 } } },
+      ]);
+
+      const countMap = Object.fromEntries(
+        questionCounts.map((qc) => [qc._id.toString(), qc.count])
+      );
+
+      // 3. Attach questionCount to all topics (including those with 0)
+      topics = topics.map((topic) => ({
+        ...topic,
+        questionCount: countMap[topic._id.toString()] || 0,
+      }));
+
+      // 4. Sort by questionCount descending
+      topics.sort((a, b) => b.questionCount - a.questionCount);
+
       res.status(200).json(topics);
     } catch (err) {
       res.status(500).json({
@@ -80,7 +101,7 @@ class TopicController {
       res.status(201).json({
         message: "Topic added Successfully",
         newTopic,
-        subjectId
+        subjectId,
       });
     } catch (err) {
       return res.status(500).json({
@@ -101,7 +122,6 @@ class TopicController {
       if (!topic) {
         return res.status(404).json({
           message: "topic Does not exist",
-
         });
       }
 
@@ -121,8 +141,8 @@ class TopicController {
 
       return res.status(200).json({
         message: "topic and its related questions are deleted Successfully",
-        topicId : topic._id,
-        subjectId : topic.subjectId
+        topicId: topic._id,
+        subjectId: topic.subjectId,
       });
     } catch (err) {
       res.status(500).json({
