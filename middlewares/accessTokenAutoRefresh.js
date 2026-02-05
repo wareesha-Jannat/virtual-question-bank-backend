@@ -5,6 +5,18 @@ import getUserIdFromRefreshToken from "../utils/getUserIdFromRefreshToken.js";
 
 const refreshState = new Map(); // { userId: { isRefreshing: boolean, refreshPromise: Promise } }
 const globalTokens = new Map(); // { userId: { accessToken, refreshToken } }
+
+const CLEANUP_INTERVAL = 5 * 60 * 1000; //5 minutes
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, tokenData] of globalTokens.entries()) {
+    if (tokenData.expiresAt <= now) {
+      globalTokens.delete(userId);
+      refreshState.delete(userId);
+    }
+  }
+}, CLEANUP_INTERVAL);
 // Middleware to automatically refresh the access token if it is expired.
 
 function unauthorizedResponse(res) {
@@ -48,7 +60,7 @@ const accessTokenAutoRefresh = async (req, res, next) => {
         cachedTokens.accessToken,
         cachedTokens.refreshToken,
         cachedTokens.accessTokenExp,
-        cachedTokens.refreshTokenExp
+        cachedTokens.refreshTokenExp,
       );
       req.headers["authorization"] = `Bearer ${cachedTokens.accessToken}`;
       return next();
@@ -70,7 +82,7 @@ const accessTokenAutoRefresh = async (req, res, next) => {
           newTokens.newAccessToken,
           newTokens.newRefreshToken,
           newTokens.newAccessTokenExp,
-          newTokens.newRefreshTokenExp
+          newTokens.newRefreshTokenExp,
         );
 
         // Add the new access token to the authorization header
@@ -99,7 +111,7 @@ const accessTokenAutoRefresh = async (req, res, next) => {
         refreshResponse.newAccessToken,
         refreshResponse.newRefreshToken,
         refreshResponse.newAccessTokenExp,
-        refreshResponse.newRefreshTokenExp
+        refreshResponse.newRefreshTokenExp,
       );
 
       // Add the new access token to the authorization header for the request
@@ -110,11 +122,8 @@ const accessTokenAutoRefresh = async (req, res, next) => {
         refreshToken: refreshResponse.newRefreshToken,
         accessTokenExp: refreshResponse.newAccessTokenExp,
         refreshTokenExp: refreshResponse.newRefreshTokenExp,
+        expiresAt: refreshResponse.newAccessTokenExp,
       });
-
-      // Reset refresh state after obtaining the new tokens
-      state.isRefreshing = false;
-      state.refreshPromise = null;
 
       return next();
     } catch (error) {
