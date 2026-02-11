@@ -4,19 +4,7 @@ import setTokensCookies from "../utils/setTokensCookies.js";
 import getUserIdFromRefreshToken from "../utils/getUserIdFromRefreshToken.js";
 
 const refreshState = new Map(); // { userId: { isRefreshing: boolean, refreshPromise: Promise } }
-const globalTokens = new Map(); // { userId: { accessToken, refreshToken } }
 
-const CLEANUP_INTERVAL = 5 * 60 * 1000; //5 minutes
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [userId, tokenData] of globalTokens.entries()) {
-    if (tokenData.expiresAt <= now) {
-      globalTokens.delete(userId);
-      refreshState.delete(userId);
-    }
-  }
-}, CLEANUP_INTERVAL);
 // Middleware to automatically refresh the access token if it is expired.
 
 function unauthorizedResponse(res) {
@@ -51,20 +39,7 @@ const accessTokenAutoRefresh = async (req, res, next) => {
       return unauthorizedResponse(res);
     }
 
-    // Use the cached tokens if available and valid
-    const cachedTokens = globalTokens.get(userId);
-    if (cachedTokens && !isTokenExpire(cachedTokens.accessToken)) {
-      // Use cached tokens for the request
-      setTokensCookies(
-        res,
-        cachedTokens.accessToken,
-        cachedTokens.refreshToken,
-        cachedTokens.accessTokenExp,
-        cachedTokens.refreshTokenExp,
-      );
-      req.headers["authorization"] = `Bearer ${cachedTokens.accessToken}`;
-      return next();
-    }
+    let didStartRefresh = false;
     // Retrieve or initialize the refresh state for this user
     if (!refreshState.has(userId)) {
       refreshState.set(userId, { isRefreshing: false, refreshPromise: null });
@@ -95,8 +70,10 @@ const accessTokenAutoRefresh = async (req, res, next) => {
     }
 
     // If no refresh is in progress, initiate the refresh process
+
     state.isRefreshing = true;
     state.refreshPromise = refreshAccessToken(refreshToken); // Initiate token refresh
+    didStartRefresh = true;
 
     try {
       const refreshResponse = await state.refreshPromise;
@@ -116,26 +93,15 @@ const accessTokenAutoRefresh = async (req, res, next) => {
 
       // Add the new access token to the authorization header for the request
       req.headers["authorization"] = `Bearer ${refreshResponse.newAccessToken}`;
-      // Cache the new tokens
-      globalTokens.set(userId, {
-        accessToken: refreshResponse.newAccessToken,
-        refreshToken: refreshResponse.newRefreshToken,
-        accessTokenExp: refreshResponse.newAccessTokenExp,
-        refreshTokenExp: refreshResponse.newRefreshTokenExp,
-        expiresAt: refreshResponse.newAccessTokenExp,
-      });
 
       return next();
     } catch (error) {
-      // Reset refresh state in case of error
-
-      refreshState.delete(userId);
-      globalTokens.delete(userId);
       // Reject any waiting requests
       return unauthorizedResponse(res);
     } finally {
-      state.isRefreshing = false;
-      state.refreshPromise = null;
+      if (didStartRefresh) {
+        refreshState.delete(userId);
+      }
     }
   } catch (error) {
     return unauthorizedResponse(res);

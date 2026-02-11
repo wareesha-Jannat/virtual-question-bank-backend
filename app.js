@@ -1,3 +1,9 @@
+//Handle unCaught exception
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION! 💥 Shutting down...");
+  console.error(err.name, err.message, err.stack);
+  process.exit(1);
+});
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -32,7 +38,7 @@ const allowedOrigin =
   process.env.FRONTEND_HOST ||
   "https://virtual-question-bank-frontend.vercel.app";
 
-// ==================== CORS FIX ====================
+// CORS FIX
 const corsOptions = {
   origin: allowedOrigin,
   credentials: true,
@@ -43,27 +49,27 @@ const corsOptions = {
 app.options("*", cors(corsOptions)); // Preflight must be FIRST
 app.use(cors(corsOptions));
 
-// ==================== Middleware Order FIX ====================
+// Middleware Order FIX
 app.use(express.json());
 app.use(cookieParser());
 app.use(passport.initialize());
 
-// ==================== DB Connection ====================
+// DB Connection
 connectDb(DATABASE_URL);
 
-// ==================== Cron Job ====================
+// Cron Job
 cron.schedule("0 0 * * *", async () => {
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     await User.updateMany(
       { lastLogin: { $lt: thirtyDaysAgo } },
-      { isActive: false }
+      { isActive: false },
     );
   } catch (error) {}
 });
 
-// ==================== Routes ====================
+// Routes
 app.use("/subjects", subjectRouter);
 app.use("/topics", topicRouter);
 app.use("/questions", QuestionRouter);
@@ -78,7 +84,35 @@ app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
 });
 
-// ==================== Start Server ====================
+// Start Server
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on port ${port}`);
+});
+
+// Graceful Shutdown
+const gracefulShutdown = (signal) => {
+  console.log(`${signal} received. Closing server gracefully...`);
+  server.close(() => {
+    console.log("Server closed. Exiting process.");
+    process.exit(0);
+  });
+
+  // Force exit after 10 seconds if connections are stuck
+  setTimeout(() => {
+    console.error(
+      "Could not close connections in time, forcefully shutting down",
+    );
+    process.exit(1);
+  }, 10000);
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("UNHANDLED REJECTION! 💥 Shutting down...");
+  console.error(reason);
+
+  gracefulShutdown("unhandledRejection");
 });
