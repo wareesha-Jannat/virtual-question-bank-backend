@@ -1,9 +1,3 @@
-//Handle unCaught exception
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION! 💥 Shutting down...");
-  console.error(err.name, err.message, err.stack);
-  process.exit(1);
-});
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -12,6 +6,8 @@ import cookieParser from "cookie-parser";
 import passport from "passport";
 import cors from "cors";
 import cron from "node-cron";
+import helmet from "helmet";
+import morgan from "morgan";
 
 import "./config/passport-jwt-strategy.js";
 import connectDb from "./config/connectDb.js";
@@ -30,15 +26,29 @@ import ResultRouter from "./routes/results.js";
 import SupportRequestRouter from "./routes/supportRequests.js";
 import ExamSessionRouter from "./routes/examSessions.js";
 
+//Handle unCaught exception
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION! 💥 Shutting down...");
+  console.error(err.name, err.message, err.stack);
+  process.exit(1);
+});
+
 const app = express();
 const port = process.env.PORT || 5000;
 const DATABASE_URL = process.env.DB_URL;
+
+// DB Connection
+connectDb(DATABASE_URL);
+
+//Middlewares
+
+app.set("trust proxy", 1);
 
 const allowedOrigin =
   process.env.FRONTEND_HOST ||
   "https://virtual-question-bank-frontend.vercel.app";
 
-// CORS FIX
+// CORS
 const corsOptions = {
   origin: allowedOrigin,
   credentials: true,
@@ -49,13 +59,13 @@ const corsOptions = {
 app.options("*", cors(corsOptions)); // Preflight must be FIRST
 app.use(cors(corsOptions));
 
-// Middleware Order FIX
+// Security headers, logging, parsing
+app.use(helmet());
+app.use(morgan("combined"));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(passport.initialize());
-
-// DB Connection
-connectDb(DATABASE_URL);
 
 // Cron Job
 cron.schedule("0 0 * * *", async () => {
