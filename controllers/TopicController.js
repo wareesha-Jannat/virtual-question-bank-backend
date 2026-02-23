@@ -7,7 +7,7 @@ import Activity from "../models/Activity.js";
 class TopicController {
   //Get Topics
   static getTopics = async (req, res) => {
-    try {
+   
       const { subjectId } = req.query;
 
       if (!subjectId) {
@@ -45,16 +45,12 @@ class TopicController {
       topics.sort((a, b) => b.questionCount - a.questionCount);
 
       res.status(200).json(topics);
-    } catch (err) {
-      res.status(500).json({
-        message: "Could not get Topics, internal server error",
-      });
-    }
+   
   };
 
   //Adding new Topic
   static addTopic = async (req, res) => {
-    try {
+   
       const { subjectId, topic } = req.body;
 
       //Checking if input fields are empty
@@ -103,17 +99,13 @@ class TopicController {
         newTopic,
         subjectId,
       });
-    } catch (err) {
-      return res.status(500).json({
-        message: "Could not add Topic server error",
-      });
-    }
+  
   };
 
   //Deleting topic
 
   static deleteTopic = async (req, res) => {
-    try {
+   
       const { topicId } = req.params;
 
       //Checking if the topic exists
@@ -144,11 +136,7 @@ class TopicController {
         topicId: topic._id,
         subjectId: topic.subjectId,
       });
-    } catch (err) {
-      res.status(500).json({
-        message: "Server error, unable to delete topic",
-      });
-    }
+  
   };
 }
 export default TopicController;

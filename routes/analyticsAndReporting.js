@@ -1,14 +1,29 @@
-import express from 'express';
-import AnalyticsAndReportingController from '../controllers/AnalyticsAndReportingController.js';
-import passport from 'passport';
-import accessTokenAutoRefresh from '../middlewares/accessTokenAutoRefresh.js';
+import express from "express";
+import AnalyticsAndReportingController from "../controllers/AnalyticsAndReportingController.js";
+import passport from "passport";
+import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 const router = express.Router();
 
-router.post('/reportingData',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  AnalyticsAndReportingController.reportingData)
+router.post(
+  "/reports",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(AnalyticsAndReportingController.reportingData),
+);
 
-router.get('/analyticsData',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  AnalyticsAndReportingController.analyticsData)
- 
-router.get('/performanceData',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}), AnalyticsAndReportingController.performanceData)
+router.get(
+  "/analytics",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(AnalyticsAndReportingController.analyticsData),
+);
 
+router.get(
+  "/performance",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(AnalyticsAndReportingController.performanceData),
+);
 
 export default router;

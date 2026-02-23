@@ -8,7 +8,7 @@ import Activity from "../models/Activity.js";
 class DashboardController {
   // Dashboard data
   static dashboardData = async (req, res) => {
-    try {
+  
       const users = await User.countDocuments({}); // Count the total number of users in the system
       const questions = await Question.countDocuments({}); // Count the total number of questions in the system
       const subjects = await Subject.countDocuments({}); // Count the total number of subjects in the system
@@ -86,16 +86,13 @@ class DashboardController {
 
       // Send the response
       res.status(200).json(dashboardData);
-    } catch (error) {
-      res.status(500).json({ message: "Internal server error" });
-    }
   };
 
   //Student
 
   // Student dashboard data
   static studentDashboardData = async (req, res) => {
-    try {
+  
       const user = req.user;
 
       // Count the number of exams taken by the user
@@ -196,9 +193,6 @@ class DashboardController {
       };
 
       res.status(200).json(dashboardData);
-    } catch (error) {
-      res.status(500).json({ message: "Internal server error" });
-    }
   };
 }
 

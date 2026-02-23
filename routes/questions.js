@@ -1,22 +1,50 @@
-import express from 'express';
-import QuestionController from '../controllers/QuestionController.js';
-import passport from 'passport';
-import accessTokenAutoRefresh from '../middlewares/accessTokenAutoRefresh.js';
+import express from "express";
+import QuestionController from "../controllers/QuestionController.js";
+import passport from "passport";
+import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 const router = express.Router();
 
 //Public Route
-router.get('/getQuestions',  QuestionController.getQuestionPageQuestions )
+router.get(
+  "/",
+  asyncHandler(QuestionController.getQuestionPageQuestions),
+);
 
 //Protected Routes
-router.post('/addQuestion',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  QuestionController.addQuestion)
+router.post(
+  "/",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(QuestionController.addQuestion),
+);
 
-router.get('/getQuestionsByAdmin',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  QuestionController.getQuestionsByAdmin )
- 
-router.put('/updateQuestion/:questionId',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  QuestionController.updateQuestion )
+router.get(
+  "/admin",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(QuestionController.getQuestionsByAdmin),
+);
 
-router.delete('/deleteQuestion/:questionId',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}), QuestionController.deleteQuestion)
+router.patch(
+  "/:questionId",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(QuestionController.updateQuestion),
+);
 
-router.post('/evaluateResponse',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  QuestionController.evaluateResponse)
+router.delete(
+  "/:questionId",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(QuestionController.deleteQuestion),
+);
 
+router.post(
+  "/evaluations",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(QuestionController.evaluateResponse),
+);
 
 export default router;

@@ -2,47 +2,48 @@ import express from "express";
 import SupportRequestController from "../controllers/SupportRequestController.js";
 import passport from "passport";
 import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 const router = express.Router();
 
 router.post(
-  "/createRequest",
+  "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  SupportRequestController.createSupportRequest
+  asyncHandler(SupportRequestController.createSupportRequest),
 );
 
 router.get(
-  "/getRequests",
+  "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  SupportRequestController.getUserSupportRequests
+  asyncHandler(SupportRequestController.getUserSupportRequests),
 );
 router.delete(
-  "/deleteRequest",
+  "/:id",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  SupportRequestController.deleteRequest
+  asyncHandler(SupportRequestController.deleteRequest),
 );
 
 router.get(
-  "/getRespondedRequests",
+  "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  SupportRequestController.getUserRespondedRequests
+  asyncHandler(SupportRequestController.getUserRespondedRequests),
 );
 
 router.get(
-  "/getNewRequests",
+  "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  SupportRequestController.getNewRequests
+  asyncHandler(SupportRequestController.getNewRequests),
 );
 
 router.post(
-  "/saveRequestResponse",
+  "/:id",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  SupportRequestController.respondToSupportRequest
+  asyncHandler(SupportRequestController.respondToSupportRequest),
 );
 
 export default router;

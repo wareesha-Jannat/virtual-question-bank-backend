@@ -1,14 +1,29 @@
-import express from 'express';
-import ResultController from '../controllers/ResultController.js';
-import passport from 'passport';
-import accessTokenAutoRefresh from '../middlewares/accessTokenAutoRefresh.js';
+import express from "express";
+import ResultController from "../controllers/ResultController.js";
+import passport from "passport";
+import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 const router = express.Router();
 
-router.get('/getResults',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  ResultController.getResultsByUser)
+router.get(
+  "/",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(ResultController.getResultsByUser),
+);
 
-router.post('/detailResult',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  ResultController.getDetailResult)
+router.get(
+  "/:id",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(ResultController.getDetailResult),
+);
 
-router.post('/getSingleResult',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  ResultController.getSingleResult)
-
+router.get(
+  "/:resultId",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(ResultController.getSingleResult),
+);
 
 export default router;

@@ -1,16 +1,36 @@
-import express from 'express';
-import NotificationController from '../controllers/NotificationController.js';
-import passport from 'passport';
-import accessTokenAutoRefresh from '../middlewares/accessTokenAutoRefresh.js';
+import express from "express";
+import NotificationController from "../controllers/NotificationController.js";
+import passport from "passport";
+import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 const router = express.Router();
 
-router.post('/createNotification',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  NotificationController.createNotification)
+router.post(
+  "/",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(NotificationController.createNotification),
+);
 
-router.get('/getNotifications',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}),  NotificationController.getNotifications)
- 
-router.put('/updateNotification/markAsRead/:notificationId',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}), NotificationController.markAsRead )
+router.get(
+  "/",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(NotificationController.getNotifications),
+);
 
-router.get('/hasUnread',accessTokenAutoRefresh, passport.authenticate( 'jwt', {session: false}), NotificationController.checkUnreadNotifications)
+router.patch(
+  "/:notificationId",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(NotificationController.markAsRead),
+);
 
+router.get(
+  "/unread/count",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(NotificationController.checkUnreadNotifications),
+);
 
 export default router;

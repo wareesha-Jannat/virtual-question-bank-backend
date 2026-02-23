@@ -8,6 +8,7 @@ import cors from "cors";
 import cron from "node-cron";
 import helmet from "helmet";
 import morgan from "morgan";
+import { globalErrorHandler } from "./middlewares/errorMiddleware.js";
 
 import "./config/passport-jwt-strategy.js";
 import connectDb from "./config/connectDb.js";
@@ -85,15 +86,22 @@ app.use("/topics", topicRouter);
 app.use("/questions", QuestionRouter);
 app.use("/users", UserRouter);
 app.use("/notifications", NotificationRouter);
-app.use("/exams", ExamSessionRouter);
-app.use("/analyticsAndReporting", AnalyticsAndReportingRouter);
+app.use("/exam-sessions", ExamSessionRouter);
+app.use("/insights", AnalyticsAndReportingRouter);
 app.use("/dashboard", DashboardRouter);
 app.use("/results", ResultRouter);
-app.use("/support", SupportRequestRouter);
+app.use("/support-requests", SupportRequestRouter);
+
 app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
 });
 
+//404 Error handler
+app.use((req, res, next) => {
+  res.status(404).json({message : "Route not found "})
+})
+
+app.use(globalErrorHandler)
 // Start Server
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on port ${port}`);

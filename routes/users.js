@@ -4,73 +4,79 @@ import { loginLimit } from "../middlewares/rateLimiter.js";
 const router = express.Router();
 import passport from "passport";
 import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 //Public Routes
-router.post("/register", loginLimit, UserController.userRegistration);
-router.post("/login", loginLimit, UserController.userLogin);
-router.post("/reset-password-link", UserController.sendResetPassword);
-router.post("/reset-password/:id/:token", UserController.passwordReset);
+router.post(
+  "/register",
+  loginLimit,
+  asyncHandler(UserController.userRegistration),
+);
+router.post("/login", loginLimit, asyncHandler(UserController.userLogin));
+router.post(
+  "/password-resets",
+  asyncHandler(UserController.sendResetPassword),
+);
+router.patch(
+  "/reset-password/:id/:token",
+  asyncHandler(UserController.passwordReset),
+);
 
 //Protected routes
 router.get(
   "/me",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.userProfile,
+  asyncHandler(UserController.userProfile),
 );
 router.post(
   "/logout",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.userLogout,
+  asyncHandler(UserController.userLogout),
 );
 router.post(
-  "/changePassword",
+  "/password",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.changePassword,
+  asyncHandler(UserController.changePassword),
 );
 router.get(
-  "/getUsers",
+  "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.getUsers,
+  asyncHandler(UserController.getUsers),
 );
 router.post(
-  "/addUser",
+  "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.addUser,
+  asyncHandler(UserController.addUser),
 );
-router.put(
-  "/updateUser/:userId",
+router.patch(
+  "/:userId",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.updateUser,
-);
-router.delete(
-  "/deleteUser/:userId",
-  accessTokenAutoRefresh,
-  passport.authenticate("jwt", { session: false }),
-  UserController.deleteUser,
+  asyncHandler(UserController.updateUser),
 );
 router.delete(
-  "/deleteAccount/:userId",
+  "/:userId",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.deleteUser,
+  asyncHandler(UserController.deleteUser),
 );
-router.put(
-  "/updatePersonalInfo/:userId",
+
+router.patch(
+  "/:userId",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.updatePersonalInfo,
+  asyncHandler(UserController.updatePersonalInfo),
 );
 router.get(
   "/me/role",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  UserController.userRole,
+  asyncHandler(UserController.userRole),
 );
 
 export default router;
