@@ -91,6 +91,8 @@ app.use("/insights", AnalyticsAndReportingRouter);
 app.use("/dashboard", DashboardRouter);
 app.use("/results", ResultRouter);
 app.use("/support-requests", SupportRequestRouter);
+console.log("EMAIL_USER:", process.env.EMAIL_USER);
+console.log("EMAIL_PASS:", process.env.EMAIL_PASS);
 
 app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
