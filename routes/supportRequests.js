@@ -12,12 +12,6 @@ router.post(
   asyncHandler(SupportRequestController.createSupportRequest),
 );
 
-router.get(
-  "/",
-  accessTokenAutoRefresh,
-  passport.authenticate("jwt", { session: false }),
-  asyncHandler(SupportRequestController.getUserSupportRequests),
-);
 router.delete(
   "/:id",
   accessTokenAutoRefresh,
@@ -29,17 +23,19 @@ router.get(
   "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  asyncHandler(SupportRequestController.getUserRespondedRequests),
+  asyncHandler((req, res)=>{
+    const {type} = req.query;
+    if(type === "new"){
+      return SupportRequestController.getNewRequests(req, res)
+    }
+    if(type === "responded"){
+      return SupportRequestController.getUserRespondedRequests(req, res)
+    }
+    return SupportRequestController.getUserSupportRequests(req, res)
+  }),
 );
 
-router.get(
-  "/",
-  accessTokenAutoRefresh,
-  passport.authenticate("jwt", { session: false }),
-  asyncHandler(SupportRequestController.getNewRequests),
-);
-
-router.post(
+router.patch(
   "/:id",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),

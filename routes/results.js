@@ -11,19 +11,18 @@ router.get(
   passport.authenticate("jwt", { session: false }),
   asyncHandler(ResultController.getResultsByUser),
 );
-
-router.get(
-  "/:id",
-  accessTokenAutoRefresh,
-  passport.authenticate("jwt", { session: false }),
-  asyncHandler(ResultController.getDetailResult),
-);
-
 router.get(
   "/:resultId",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
   asyncHandler(ResultController.getSingleResult),
+);
+
+router.get(
+  "/detail/:id",
+  accessTokenAutoRefresh,
+  passport.authenticate("jwt", { session: false }),
+  asyncHandler(ResultController.getDetailResult),
 );
 
 export default router;

@@ -28,7 +28,7 @@ passport.use(
       }
     } catch (error) {
       // If an error occurs during the database query, return the error
-      return done(err, false);
+      return done(error, false);
     }
   })
 );

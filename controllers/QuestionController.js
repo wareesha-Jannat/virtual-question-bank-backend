@@ -172,7 +172,7 @@ class QuestionController {
         .status(400)
         .json({ message: "subjectId and topicId are required" });
     }
-    const pageSize = 7;
+    const pageSize = 5;
 
     const query = {
       topicId,
@@ -183,6 +183,7 @@ class QuestionController {
         _id: { $lt: new mongoose.Types.ObjectId(String(cursor)) },
       }),
     };
+
     // Fetch questions from the database based on subjectId and topicId
     const questions = await Question.find(query)
       .select(
@@ -192,8 +193,11 @@ class QuestionController {
       .limit(pageSize + 1);
 
     const hasMore = questions.length > pageSize;
-    const nextCursor = hasMore ? questions[pageSize]._id.toString() : null;
+
     const finalQuestions = hasMore ? questions.slice(0, pageSize) : questions;
+    const nextCursor = hasMore
+      ? finalQuestions[finalQuestions.length - 1]._id.toString()
+      : null;
 
     // Send response with the questions
     return res.status(200).json({

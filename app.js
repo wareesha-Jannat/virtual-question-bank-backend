@@ -98,12 +98,12 @@ app.get("/", (req, res) => {
 
 //404 Error handler
 app.use((req, res, next) => {
-  res.status(404).json({message : "Route not found "})
-})
+  res.status(404).json({ message: "Route not found " });
+});
 
-app.use(globalErrorHandler)
+app.use(globalErrorHandler);
 // Start Server
-app.listen(port, "0.0.0.0", () => {
+const server = app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on port ${port}`);
 });
 

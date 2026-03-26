@@ -8,58 +8,93 @@ class ResultController {
     const { cursor = null, search = "" } = req.query;
     const pageSize = 10;
 
-    const query = {
-      userId,
-      ...(search && { subject: { $regex: search, $options: "i" } }),
-      ...(cursor && {
-        _id: { $lt: new mongoose.Types.ObjectId(String(cursor)) },
-      }),
-    };
-    const results = await Result.find(query)
-      .populate({
-        path: "examSessionId",
-        select: "subjectId topicList",
-        match: search
-          ? {
-              subjectId: {
-                $exists: true,
-              },
-            }
-          : {},
-        populate: [
-          {
-            path: "subjectId",
-            select: "name",
-            match: search ? { name: { $regex: search, $options: "i" } } : {}, // Filter subject here!
-          },
-          {
-            path: "topicList",
-            select: "name",
-          },
-        ],
-      })
-      .select("percentage isPass examSessionId date")
-      .sort({ _id: -1 })
-      .limit(pageSize + 1);
+    // Cursor filter
+    const cursorFilter = cursor
+      ? { _id: { $lt: new mongoose.Types.ObjectId(cursor) } }
+      : {};
 
-    // Format results for the frontend
-    const formattedResults = results.map((result) => ({
-      resultId: result._id,
-      examSessionId: result.examSessionId._id,
-      subjectName: result.examSessionId.subjectId.name,
-      date: result.date,
-      isPass: result.isPass,
-      topics: result.examSessionId.topicList
-        ?.map((topic) => topic.name)
-        .join(", "),
-      percentage: result.percentage,
+    // Build aggregation pipeline
+    const pipeline = [
+      // Step 1: Filter by user and optional cursor
+      { $match: { userId, ...cursorFilter } },
+
+      // Step 2: Sort by newest first
+      { $sort: { _id: -1 } },
+
+      // Step 3: Limit +1 to check if there is a next page
+      { $limit: pageSize + 1 },
+
+      // Step 4: Join ExamSession
+      {
+        $lookup: {
+          from: "examsessions",
+          localField: "examSessionId",
+          foreignField: "_id",
+          as: "examSession",
+        },
+      },
+      { $unwind: "$examSession" },
+
+      // Step 5: Join Subject
+      {
+        $lookup: {
+          from: "subjects",
+          localField: "examSession.subjectId",
+          foreignField: "_id",
+          as: "subject",
+        },
+      },
+      { $unwind: "$subject" },
+
+      // Step 6: Optional search filter
+      ...(search
+        ? [
+            {
+              $match: {
+                "subject.name": { $regex: search, $options: "i" },
+              },
+            },
+          ]
+        : []),
+
+      // Step 7: Join topics
+      {
+        $lookup: {
+          from: "topics",
+          localField: "examSession.topicList",
+          foreignField: "_id",
+          as: "topics",
+        },
+      },
+
+      // Step 8: Project only fields needed for frontend
+      {
+        $project: {
+          resultId: "$_id",
+          examSessionId: "$examSession._id",
+          subjectName: "$subject.name",
+          date: 1,
+          isPass: 1,
+          percentage: 1,
+          topics: "$topics.name",
+        },
+      },
+    ];
+
+    let results = await Result.aggregate(pipeline);
+
+    // Format topics as comma-separated string
+    results = results.map((r) => ({
+      ...r,
+      topics: r.topics?.join(", "),
     }));
 
-    const hasMore = formattedResults.length > pageSize;
-    const nextCursor = hasMore ? results[pageSize]._id.toString() : null;
-    const finalResults = hasMore
-      ? formattedResults.slice(0, pageSize)
-      : formattedResults;
+    // Handle pagination cursor
+    const hasMore = results.length > pageSize;
+    const finalResults = hasMore ? results.slice(0, pageSize) : results;
+    const nextCursor = hasMore
+      ? finalResults[finalResults.length - 1].resultId.toString()
+      : null;
 
     return res.status(200).json({
       results: finalResults,
@@ -71,7 +106,7 @@ class ResultController {
   static getSingleResult = async (req, res) => {
     const { resultId } = req.params;
 
-    const populatedResult = await Result.findOne({ _id: resultId.resultId })
+    const populatedResult = await Result.findOne({ _id: resultId })
       .populate({
         path: "examSessionId",
         select:
@@ -94,7 +129,7 @@ class ResultController {
 
   //get detail result
   static getDetailResult = async (req, res) => {
-    const { id : examSessionId } = req.params;
+    const { id: examSessionId } = req.params;
 
     const exam = await ExamSession.findById(examSessionId)
       .populate({

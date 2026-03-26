@@ -1,5 +1,6 @@
 import Notification from "../models/Notification.js";
 import { sendNotification } from "../utils/sendNotification.js";
+
 class NotificationController {
   // create Notifications
   static createNotification = async (req, res) => {
@@ -22,11 +23,9 @@ class NotificationController {
   //get Notifications
   static getNotifications = async (req, res) => {
     const userId = req.user._id;
-
     const notifications = await Notification.find({
       receiverId: userId,
     }).sort({ createdAt: -1 }); // Sort by most recent notifications descending order
-
     return res.status(200).json({ notifications, userId });
   };
 

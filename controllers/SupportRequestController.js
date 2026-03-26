@@ -75,7 +75,7 @@ class SupportRequestController {
   static getUserSupportRequests = async (req, res) => {
     const userId = req.user._id;
     const { cursor = null, search = "" } = req.query;
-    const pageSize = 7;
+    const pageSize = 5;
     const query = {
       userId,
       ...(cursor && {
@@ -88,20 +88,22 @@ class SupportRequestController {
         ],
       }),
     };
+
     // Find all support requests where the logged-in user is the requester
     const userRequests = await SupportRequest.find(query)
       .populate("respondedAdminId", "name")
       .sort({ _id: -1 })
       .limit(pageSize + 1)
       .lean();
-    const nextCursor =
-      userRequests.length > pageSize
-        ? userRequests[pageSize]._id.toString()
-        : null;
+
     const requests =
       userRequests.length > pageSize
         ? userRequests.slice(0, pageSize)
         : userRequests;
+    const nextCursor =
+      userRequests.length > pageSize
+        ? requests[requests.length - 1]._id.toString()
+        : null;
     // Send success response with the requests
     return res.status(200).json({
       requests,
@@ -140,62 +142,59 @@ class SupportRequestController {
   };
 
   static getUserRespondedRequests = async (req, res) => {
-    if (req.query.respondedByMe === "true") {
-      const userId = req.user._id;
-      const { cursor = null, search = "" } = req.query;
-      const pageSize = 7;
-      const query = {
-        respondedAdminId: userId,
-        ...(cursor && {
-          _id: { $lt: new mongoose.Types.ObjectId(String(cursor)) },
-        }),
-        ...(search && {
-          $or: [
-            { subject: { $regex: search, $options: "i" } },
-            { message: { $regex: search, $options: "i" } },
-          ],
-        }),
-      };
+    const userId = req.user._id;
+    const { cursor = null, search = "" } = req.query;
+    const pageSize = 5;
+    const query = {
+      respondedAdminId: userId,
+      ...(cursor && {
+        _id: { $lt: new mongoose.Types.ObjectId(String(cursor)) },
+      }),
+      ...(search && {
+        $or: [
+          { subject: { $regex: search, $options: "i" } },
+          { message: { $regex: search, $options: "i" } },
+        ],
+      }),
+    };
 
-      // Find requests where the user is the responder
-      const respondedRequests = await SupportRequest.find(query)
-        .populate("userId", "name")
-        .sort({ _id: -1 })
-        .limit(pageSize + 1)
-        .lean();
+    // Find requests where the user is the responder
+    const respondedRequests = await SupportRequest.find(query)
+      .populate("userId", "name")
+      .sort({ _id: -1 })
+      .limit(pageSize + 1)
+      .lean();
 
-      const nextCursor =
-        respondedRequests.length > pageSize
-          ? respondedRequests[pageSize]._id.toString()
-          : null;
-      const requests =
-        respondedRequests.length > pageSize
-          ? respondedRequests.slice(0, pageSize)
-          : respondedRequests;
+    const requests =
+      respondedRequests.length > pageSize
+        ? respondedRequests.slice(0, pageSize)
+        : respondedRequests;
 
-      // Send success response with the combined requests
-      return res.status(200).json({
-        requests,
-        nextCursor,
-      });
-    }
+    const nextCursor =
+      respondedRequests.length > pageSize
+        ? requests[requests.length - 1]._id.toString()
+        : null;
+
+    // Send success response with the combined requests
+    return res.status(200).json({
+      requests,
+      nextCursor,
+    });
   };
 
   static getNewRequests = async (req, res) => {
-    if (req.query.new === "true") {
-      // Find new requests that have no respondedAdminId (i.e., no admin has responded yet)
-      const newRequests = await SupportRequest.find({
-        respondedAdminId: null,
-      }).populate("userId", "name"); //populate user info
+    // Find new requests that have no respondedAdminId (i.e., no admin has responded yet)
+    const newRequests = await SupportRequest.find({
+      respondedAdminId: null,
+    }).populate("userId", "name"); //populate user info
 
-      // Combine both responded and new requests into one object
-      const result = {
-        newRequests,
-      };
+    // Combine both responded and new requests into one object
+    const result = {
+      newRequests,
+    };
 
-      // Send success response with the combined requests
-      return res.status(200).json(result);
-    }
+    // Send success response with the combined requests
+    return res.status(200).json(result);
   };
 
   //Response to support request
@@ -218,6 +217,10 @@ class SupportRequestController {
 
     // Save the updated support request
     await supportRequest.save();
+    const updatedRequest = await SupportRequest.findById(requestId)
+      .populate("userId", "name")
+      .populate("respondedAdminId", "name")
+      .lean();
 
     // Create a notification message with subject and topic names
     const title = "Support request Responded";
@@ -240,7 +243,7 @@ class SupportRequestController {
     // Send success response
     return res.status(200).json({
       message: "Response submitted successfully",
-      supportRequest,
+      supportRequest: updatedRequest,
       success: true,
     });
   };
