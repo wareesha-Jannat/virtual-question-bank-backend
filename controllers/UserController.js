@@ -8,8 +8,10 @@ import { sendNotification } from "../utils/sendNotification.js";
 import SupportRequest from "../models/SupportRequest.js";
 import Activity from "../models/Activity.js";
 import jwt from "jsonwebtoken";
-import transporter from "../config/emailConfig.js";
 import validator from "validator";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 class UserController {
   // User Registration
@@ -392,8 +394,8 @@ class UserController {
     const resetLink = `${process.env.FRONTEND_HOST}/account/reset-password-confirm/${newUser._id}/${token}`;
 
     // Send password reset email
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
+    const { error } = await resend.emails.send({
+      from: "onboarding@resend.dev",
       to: newUser.email,
       subject: "Password set Link",
       html: `
@@ -403,7 +405,13 @@ class UserController {
                 <p>You can get this link by using forget password in case of problem. </p>
             `,
     });
-
+    if (error) {
+      await User.findByIdAndDelete(newUser._id);
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
     const activity = new Activity({
       user: req.user._id, // Link the activity to the new user
       role: req.user.role,
