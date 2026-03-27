@@ -247,16 +247,24 @@ class UserController {
 
     //Reset link
     const resetLink = `${process.env.FRONTEND_HOST}/account/reset-password-confirm/${user._id}/${token}`;
+   
     //Send password reset email
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
-      to: user.email,
+   const {error} =  await resend.emails.send({
+       from: "onboarding@resend.dev",
+      to: process.env.EMAIL_FROM,
       subject: "Password Reset Link",
       html: `<p>Hello ${user.name},</p><p>Please  <a href="${resetLink}">click here </a> to reset your password.</p>`,
     });
+     if (error) {
+      await User.findByIdAndDelete(newUser._id);
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
     res.status(200).json({
       success: true,
-      message: "Password reset email sent. Please check your email",
+      message: "Password reset request has been sent to the admin. please contact admin to complete the process.",
     });
   };
 
@@ -396,7 +404,7 @@ class UserController {
     // Send password reset email
     const { error } = await resend.emails.send({
       from: "onboarding@resend.dev",
-      to: newUser.email,
+      to: process.env.EMAIL_FROM,
       subject: "Password set Link",
       html: `
                 <p>Hello ${newUser.name},</p>
@@ -424,7 +432,8 @@ class UserController {
     // Respond with success message
     res.status(201).json({
       success: true,
-      message: "User created successfully and password reset email sent.",
+      message:
+        "User created successfully and password reset email sent to admin .",
       newUser: newcomer,
     });
   };
