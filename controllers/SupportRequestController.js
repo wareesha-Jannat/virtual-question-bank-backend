@@ -1,8 +1,9 @@
 import SupportRequest from "../models/SupportRequest.js";
 import User from "../models/User.js";
-import { sendNotification } from "../utils/sendNotification.js";
-import Activity from "../models/Activity.js";
 import mongoose from "mongoose";
+import { randomUUID } from "crypto";
+import activityQueue from "../queues/activityQueue.js";
+import notificationQueue from "../queues/notificationQueue.js";
 
 class SupportRequestController {
   //Create Support REquest
@@ -45,24 +46,45 @@ class SupportRequestController {
     // Save to the database
     await newSupportRequest.save();
 
-    // Create a notification message with subject and topic names
+    // Create a notification
+
+    const notificationId = randomUUID();
     const title = "Support request created";
     const message =
       "A new Support request is created. Please respond to the request from user";
-    const receiver = "Admin";
-
-    // Send notification
-    await sendNotification({ title, message, receiver });
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, receiver: "Admin" },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
     // create activity
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User made a support request",
-    });
 
-    // Save the activity to the database
-    await activity.save();
+    //Activity
+    const activityId = randomUUID();
+    const action = "User made a support request";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     // Send success response
     return res.status(201).json({
@@ -125,14 +147,23 @@ class SupportRequestController {
       });
     }
 
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "Admin deleted a request",
-    });
+    //Activity
+    const activityId = randomUUID();
+    const action = "Admin deleted a request";
 
-    // Save the activity to the database
-    await activity.save();
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     return res.status(200).json({
       message: "Request deleted successfully",
@@ -222,23 +253,43 @@ class SupportRequestController {
       .populate("respondedAdminId", "name")
       .lean();
 
-    // Create a notification message with subject and topic names
-    const title = "Support request Responded";
+    //Notification
+
+    const notificationId = randomUUID();
+    const title = "Support request responded";
     const message = `Admin ${req.user.name} has responded to a support request`;
-    const receiver = "Admin";
 
-    // Send notification
-    await sendNotification({ title, message, receiver });
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, receiver: "Admin" },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
-    // create activity
-    const activity = new Activity({
-      user: userId,
-      role: req.user.role,
-      action: "User responded to a support request",
-    });
+    //Activity
+    const activityId = randomUUID();
+    const action = "Admin responded to a support request";
 
-    // Save the activity to the database
-    await activity.save();
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     // Send success response
     return res.status(200).json({

@@ -65,6 +65,7 @@ const accessTokenAutoRefresh = async (req, res, next) => {
 
         return next();
       } catch (error) {
+        console.log(error);
         return unauthorizedResponse(res);
       }
     }
@@ -104,6 +105,7 @@ const accessTokenAutoRefresh = async (req, res, next) => {
       }
     }
   } catch (error) {
+    console.log(error);
     return unauthorizedResponse(res);
   }
 };

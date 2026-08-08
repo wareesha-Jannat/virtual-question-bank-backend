@@ -1,12 +1,13 @@
 import Question from "../models/Question.js";
-import { sendNotification } from "../utils/sendNotification.js";
-import Activity from "../models/Activity.js";
 import Subject from "../models/Subject.js";
 import Topic from "../models/Topic.js";
 import natural from "natural";
 import { removeStopwords } from "stopword";
 import User from "../models/User.js";
 import mongoose from "mongoose";
+import { randomUUID } from "crypto";
+import activityQueue from "../queues/activityQueue.js";
+import notificationQueue from "../queues/notificationQueue.js";
 
 class QuestionController {
   // Function to extract keywords from a correct answer
@@ -103,22 +104,44 @@ class QuestionController {
     const newQuestion = new Question(questionData);
     await newQuestion.save();
 
-    // Create a notification message with subject and topic names
-    const title = "Question Added";
+    // Notification
+
+    const notificationId = randomUUID();
+    const title = "Question added";
     const message = `A new question has been added for the subject "${subjectName}" and topic "${topicName}".`;
     const receiver = "users";
 
-    // Send notification
-    await sendNotification({ title, message, receiver });
-    // store activity
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User added new Question",
-    });
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, receiver },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
-    // Save the activity to the database
-    await activity.save();
+    //Activity
+    const activityId = randomUUID();
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action: message },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+
     return res.status(201).json({
       success: true,
       message: "Question added successfully",
@@ -265,15 +288,24 @@ class QuestionController {
     if (!updatedQuestion) {
       return res.status(404).json({ message: "Question not found" });
     }
-    //Activity
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User updated a Question",
-    });
 
-    // Save the activity to the database
-    await activity.save();
+    //Activity
+    const activityId = randomUUID();
+    const action = "Admin updated a question";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     // Return the updated question
     res.status(200).json({
@@ -293,15 +325,24 @@ class QuestionController {
       });
     }
     await Question.deleteOne({ _id: questionId });
-    //Activity
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User deleted a Question",
-    });
 
-    // Save the activity to the database
-    await activity.save();
+    //Activity
+    const activityId = randomUUID();
+    const action = "Admin deleted a question";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
     res.status(200).json({
       success: true,
       message: "Question deleted Successfully",

@@ -2,6 +2,8 @@ import Question from "../models/Question.js";
 import ExamSession from "../models/ExamSession.js";
 import Result from "../models/Result.js";
 import Activity from "../models/Activity.js";
+import { randomUUID } from "crypto";
+import activityQueue from "../queues/activityQueue.js";
 
 class ExamSessionController {
   //Start Exam
@@ -139,7 +141,7 @@ class ExamSessionController {
   static finishExam = async (req, res) => {
     // Destructure the provided examSession object from the request body
     const { sessionId } = req.params;
-    const {examSession} = req.body;
+    const { examSession } = req.body;
 
     // Find the exam session by ID to ensure it exists in the database
     const existingExamSession = await ExamSession.findById(sessionId);
@@ -262,14 +264,23 @@ class ExamSessionController {
       })
       .populate({ path: "userId", select: "name" });
 
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User Completed an Exam ",
-    });
+    //Activity
+    const activityId = randomUUID();
+    const action = "User Completed an exam ";
 
-    // Save the activity to the database
-    await activity.save();
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     // Send the updated exam session and result back to the frontend
     res.status(201).json({

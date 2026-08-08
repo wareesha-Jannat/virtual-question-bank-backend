@@ -2,7 +2,9 @@ import Question from "../models/Question.js";
 import Subject from "../models/Subject.js";
 import Activity from "../models/Activity.js";
 import Topic from "../models/Topic.js";
-import { sendNotification } from "../utils/sendNotification.js";
+import activityQueue from "../queues/activityQueue.js";
+import { randomUUID } from "crypto";
+import notificationQueue from "../queues/notificationQueue.js";
 
 class SubjectController {
   //Create New Subject
@@ -32,21 +34,42 @@ class SubjectController {
     await newSubject.save();
 
     //send notification
-    const title = "Subject Added";
+
+    const notificationId = randomUUID();
+    const title = "Subject added";
     const message = `A new subject "${newSubject.name}" is added `;
-    const receiver = "users";
 
-    await sendNotification({ title, message, receiver });
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, userId: "users" },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
-    // store activity
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User added new Subject",
-    });
+    //Activity
+    const activityId = randomUUID();
+    const action = "Admin added new Subject";
 
-    // Save the activity to the database
-    await activity.save();
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     res.status(201).json({
       message: "Subject added Successfully",
@@ -99,25 +122,47 @@ class SubjectController {
     }
 
     //send notification
+
+    const notificationId = randomUUID();
     const title = "Subject deleted";
     const message = `${req.user.role} deleted subject "${subject.name}"  `;
-    const receiver = "users";
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, receiver : "users" },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
-    await sendNotification({ title, message, receiver });
     //Deleting Subject
     await Subject.deleteOne({ _id: subjectId });
     await Topic.deleteMany({ subjectId: subjectId });
     await Question.deleteMany({ subjectId: subjectId });
 
-    //store activity
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User deleted a Subject",
-    });
+    //Activity
+    const activityId = randomUUID();
+    const action = "Admin deleted a subject";
 
-    // Save the activity to the database
-    await activity.save();
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+
     res.status(200).json({
       message:
         "Subject its topics and related questions are deleted Successfully",

@@ -1,6 +1,7 @@
 import Result from "../models/Result.js";
 import ExamSession from "../models/ExamSession.js";
 import mongoose from "mongoose";
+
 class ResultController {
   //getResult
   static getResultsByUser = async (req, res) => {

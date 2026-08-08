@@ -67,7 +67,7 @@ router.delete(
 );
 
 router.patch(
-  "/:userId",
+  "/:userId/personal-info",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
   asyncHandler(UserController.updatePersonalInfo),

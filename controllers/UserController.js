@@ -4,14 +4,16 @@ import generateTokens from "../utils/generateTokens.js";
 import Question from "../models/Question.js";
 import setTokensCookies from "../utils/setTokensCookies.js";
 import UserRefreshTokenModel from "../models/UserRefreshToken.js";
-import { sendNotification } from "../utils/sendNotification.js";
 import SupportRequest from "../models/SupportRequest.js";
-import Activity from "../models/Activity.js";
-import crypto from "crypto";
+import crypto, { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import validator from "validator";
 import { Resend } from "resend";
 import PasswordResetToken from "../models/PasswordResetToken.js";
+import notificationQueue from "../queues/notificationQueue.js";
+import activityQueue from "../queues/activityQueue.js";
+import { type } from "os";
+import { delay } from "bullmq";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -55,22 +57,43 @@ class UserController {
     });
     const newcomer = await newUser.save();
 
+    //Notification
+
+    const notificationId = randomUUID();
     const title = "Complete Your Profile!";
     const message =
       "Welcome aboard! Please take a moment to complete your profile.";
-
-    // calling send  Notification to send Notification
-    await sendNotification({ title, message, userId: newcomer._id });
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, userId: newcomer._id },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
     // Create an activity log for the user registration
-    const activity = new Activity({
-      user: newcomer._id, // Link the activity to the new user
-      role: newcomer.role,
-      action: "User Registratered",
-    });
+    const activityId = randomUUID();
+    const action = "User Registratered";
 
-    // Save the activity to the database
-    await activity.save();
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: newcomer._id, role: newcomer.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     res.status(201).json({
       success: true,
@@ -82,6 +105,9 @@ class UserController {
 
   static userLogin = async (req, res) => {
     const { email, password } = req.body;
+    const startTime = Date.now();
+    console.log(`[${new Date().toISOString()}] Login started`);
+    let start = Date.now();
     //check required fields
     if (!email || !password) {
       return res.status(400).json({
@@ -89,6 +115,8 @@ class UserController {
         message: "Required fields must be filled",
       });
     }
+    console.log(`Checking fields took ${Date.now() - start} ms`);
+    start = Date.now();
     //Check user
     const user = await User.findOne({ email });
     if (!user) {
@@ -97,12 +125,14 @@ class UserController {
         message: "User not found",
       });
     }
-
+    console.log(`User lookup took ${Date.now() - start} ms`);
+    start = Date.now();
     //updating last Login field
     user.lastLogin = new Date();
     user.isActive = true; // Set isActive to true on login
     await user.save();
-
+    console.log(`User login status update took ${Date.now() - start} ms`);
+    start = Date.now();
     //Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
@@ -111,6 +141,7 @@ class UserController {
         message: "Invalid email or password",
       });
     }
+    console.log(`User password matching took ${Date.now() - start} ms`);
 
     //Generate tokens
     const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } =
@@ -126,17 +157,27 @@ class UserController {
       refreshTokenExp,
       role,
     );
-
+    console.log(`adding token took ${Date.now() - start} ms`);
     // Create an activity log for the user registration
-    const activity = new Activity({
-      user: user._id, // Link the activity to the new user
-      role: user.role,
-      action: "User Logged in",
-    });
 
-    // Save the activity to the database
-    await activity.save();
+    const activityId = randomUUID();
+    const action = "User Logged in";
 
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: user._id, role: user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+    console.log(`User activity adding took ${Date.now() - start} ms`);
+    console.log(`Total time ${Date.now() - startTime} ms`);
     //Sending response
     res.status(200).json({
       user: { role: user.role },
@@ -197,14 +238,24 @@ class UserController {
       },
     });
 
-    const activity = new Activity({
-      user: user, // Link the activity to the new user
-      role: user.role,
-      action: "User Changed password",
-    });
+    // Save the activity
 
-    // Save the activity to the database
-    await activity.save();
+    const activityId = randomUUID();
+    const action = "User Changed Password";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: user._id, role: user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     res.status(200).json({
       success: false,
@@ -390,12 +441,24 @@ class UserController {
     const userId = req.user._id; // may be undefined
 
     await UserRefreshTokenModel.findOneAndDelete({ userId });
-    const activity = new Activity({
-      user: userId,
-      role: req.user.role,
-      action: "User Logged out",
-    });
-    await activity.save();
+
+    // Save Activity
+    const activityId = randomUUID();
+    const action = "User Logged out";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: userId, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     res.clearCookie("accessToken");
     res.clearCookie("refreshToken");
@@ -442,10 +505,24 @@ class UserController {
     const newcomer = await newUser.save();
 
     //Send Notification
+
+    const notificationId = randomUUID();
     const title = "Complete Your Profile!";
     const message =
       "Welcome aboard! Please take a moment to complete your profile.";
-    await sendNotification({ title, message, userId: newcomer._id });
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, userId: newcomer._id },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
     // Generate token for password reset
     const secret = newUser._id + process.env.JWT_ACCESS_TOKEN_SECRET_KEY;
@@ -475,14 +552,25 @@ class UserController {
         message: error.message,
       });
     }
-    const activity = new Activity({
-      user: req.user._id, // Link the activity to the new user
-      role: req.user.role,
-      action: "User added new User",
-    });
 
     // Save the activity to the database
-    await activity.save();
+
+    const activityId = randomUUID();
+    const action = "New User Added";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
 
     // Respond with success message
     res.status(201).json({
@@ -547,14 +635,25 @@ class UserController {
       });
     }
 
-    const activity = new Activity({
-      user: req.user._id, // Link the activity to the new user
-      role: req.user.role,
-      action: "User updated a user",
-    });
-
     // Save the activity to the database
-    await activity.save();
+
+    const activityId = randomUUID();
+    const action = "User Updated";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+
     return res.status(200).json({
       success: true,
       message: "User updated successfully",
@@ -581,18 +680,42 @@ class UserController {
       { name, email, age, gender },
       { new: true, runValidators: true, select: "-password" },
     );
+    const notificationId = randomUUID();
     const title = "Profile updated";
     const message = "Your profile has updated successfully";
-    await sendNotification({ title, message, userId });
 
-    const activity = new Activity({
-      user: req.user._id, // Link the activity to the new user
-      role: req.user.role,
-      action: "User updated personal information",
-    });
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, userId },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
-    // Save the activity to the database
-    await activity.save();
+    //Activity
+    const activityId = randomUUID();
+    const action = "User updated personal information";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+
     return res.status(200).json({
       success: true,
       message: "Personal Info updated successfully",
@@ -628,14 +751,25 @@ class UserController {
     res.clearCookie("accessToken");
     res.clearCookie("refreshToken");
 
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User deleted his account",
-    });
-
     // Save the activity to the database
-    await activity.save();
+
+    const activityId = randomUUID();
+    const action = "User Deleted his account";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+
     return res.status(200).json({
       message: "Account deleted successfully",
       success: true,
@@ -665,14 +799,25 @@ class UserController {
     //Deleting  support requests
     await SupportRequest.deleteMany({ userId: userId });
 
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "Admin deleted a user",
-    });
+    //Save Activity
 
-    // Save the activity to the database
-    await activity.save();
+    const activityId = randomUUID();
+    const action = "Admin deleted user";
+
+    await activityQueue.add(
+      "addActivity",
+      { activityId, user: req.user._id, role: req.user.role, action },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+
     return res.status(200).json({
       message: "User deleted successfully",
       success: true,

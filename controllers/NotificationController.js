@@ -1,5 +1,6 @@
+import { randomUUID } from "crypto";
 import Notification from "../models/Notification.js";
-import { sendNotification } from "../utils/sendNotification.js";
+import notificationQueue from "../queues/notificationQueue.js";
 
 class NotificationController {
   // create Notifications
@@ -12,8 +13,23 @@ class NotificationController {
         message: "Title, message, and receiver are required fields.",
       });
     }
-    // calling send  Notification to send Notification
-    await sendNotification({ title, message, receiver });
+
+    //Notification
+
+    const notificationId = randomUUID();
+    await notificationQueue.add(
+      "sendNotification",
+      { notificationId, title, message, receiver },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        removeOnComplete: 50,
+        removeOnFail: 100,
+      },
+    );
 
     return res.status(201).json({
       message: "Notification sent successfully!",
