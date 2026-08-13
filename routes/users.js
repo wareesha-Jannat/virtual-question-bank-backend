@@ -13,10 +13,7 @@ router.post(
   asyncHandler(UserController.userRegistration),
 );
 router.post("/login", loginLimit, asyncHandler(UserController.userLogin));
-router.post(
-  "/password-resets",
-  asyncHandler(UserController.sendResetPassword),
-);
+router.post("/password-resets", asyncHandler(UserController.sendResetPassword));
 router.patch(
   "/reset-password/:id/:token",
   asyncHandler(UserController.passwordReset),
@@ -67,7 +64,7 @@ router.delete(
 );
 
 router.patch(
-  "/:userId",
+  "/:userId/personal-info",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
   asyncHandler(UserController.updatePersonalInfo),
