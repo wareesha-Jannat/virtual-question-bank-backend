@@ -8,20 +8,28 @@ import Activity from "../models/Activity.js";
 class DashboardController {
   // Dashboard data
   static dashboardData = async (req, res) => {
-  
-      const users = await User.countDocuments({}); // Count the total number of users in the system
-      const questions = await Question.countDocuments({}); // Count the total number of questions in the system
-      const subjects = await Subject.countDocuments({}); // Count the total number of subjects in the system
-      const examsTaken = await ExamSession.countDocuments({}); // Count the total number of exams taken in the system
+    const [
+      users,
+      questions,
+      subjects,
+      examsTaken,
+      recentActivity,
+      examChartData,
+      userActivity,
+    ] = await Promise.all([
+      User.countDocuments({}), // Count the total number of users in the system
+      Question.countDocuments({}), // Count the total number of questions in the system
+      Subject.countDocuments({}), // Count the total number of subjects in the system
+      ExamSession.countDocuments({}), // Count the total number of exams taken in the system
 
       // Fetch recent activity data
-      const recentActivity = await Activity.find()
+      Activity.find()
         .populate("user", "name") // Populate user field to get the user's name
         .sort({ timestamp: -1 }) // Sort by timestamp in descending order
-        .limit(10); // Limit to the most recent 10 activities
+        .limit(10), // Limit to the most recent 10 activities
 
       // Aggregate data for the exam chart
-      const examChartData = await Result.aggregate([
+      Result.aggregate([
         {
           $group: {
             _id: "$isPass", // Group by the isPass field
@@ -34,16 +42,20 @@ class DashboardController {
             name: {
               $cond: [{ $eq: ["$_id", true] }, "Passed", "Failed"], // Assign "Passed" if _id is true, otherwise "Failed"
             },
-            value: 1,
+            value: 1, //include this field in output
           },
         },
-      ]);
-
+      ]),
       // Aggregate data for user activity by day of the week
-      const userActivityData = await ExamSession.aggregate([
+      ExamSession.aggregate([
+        {
+          $match: {
+            startTime: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+          },
+        },
         {
           $group: {
-            _id: { $dayOfWeek: "$startTime" }, // Group by the day of the week based on startTime
+            _id: { $dayOfWeek: "$startTime" }, // Group examsessions according to which day of week they started
             examTaken: { $sum: 1 }, // Count the number of exams taken
           },
         },
@@ -68,38 +80,60 @@ class DashboardController {
           },
         },
         {
-          $sort: { _id: 1 }, // Sort by day of the week
+          $sort: { _id: 1 }, // Sort _id (day of week) in ascending order
         },
-      ]);
+      ]),
+    ]);
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
 
-      // Combine all the collected data into a single object
-      const dashboardData = {
-        name: req.user.name,
-        users,
-        questions,
-        subjects,
-        examsTaken,
-        recentActivity,
-        examChartData,
-        userActivityData,
-      };
+    const userActivityData = days.map((day, index) => ({
+      name: day,
+      examTaken:
+        userActivity.find((item) => item._id === index + 1)?.examTaken ?? 0,
+    }));
 
-      // Send the response
-      res.status(200).json(dashboardData);
+    // Combine all the collected data into a single object
+    const dashboardData = {
+      name: req.user.role,
+      users,
+      questions,
+      subjects,
+      examsTaken,
+      recentActivity,
+      examChartData,
+      userActivityData,
+    };
+
+    // Send the response
+    res.status(200).json(dashboardData);
   };
 
   //Student
 
   // Student dashboard data
   static studentDashboardData = async (req, res) => {
-  
-      const user = req.user;
-
+    const user = await User.findById(req.user._id).select(
+      "name practiceQuestionCount correctAnswers",
+    );
+    const [
+      examTaken,
+      averagePercentageData,
+      recentActivity,
+      examChartData,
+      userActivity,
+    ] = await Promise.all([
       // Count the number of exams taken by the user
-      const examTaken = await ExamSession.countDocuments({ userId: user });
-
+      ExamSession.countDocuments({ userId: user._id }),
       // Calculate average percentage from exam results
-      const averagePercentageData = await Result.aggregate([
+      Result.aggregate([
         {
           $match: { userId: user._id }, // Filter by userId
         },
@@ -115,18 +149,15 @@ class DashboardController {
             averagePercentage: { $round: ["$averagePercentage", 2] },
           },
         },
-      ]);
-
-      const averagePercentage =
-        averagePercentageData[0]?.averagePercentage || 0;
+      ]),
       // Fetch recent activity data
-      const recentActivity = await Activity.find({ user: user._id })
+      Activity.find({ user: user._id })
         .populate("user", "name")
         .sort({ timestamp: -1 })
-        .limit(10);
+        .limit(10),
 
       // Aggregate data for the exam chart
-      const examChartData = await Result.aggregate([
+      Result.aggregate([
         {
           $match: { userId: user._id },
         },
@@ -145,12 +176,15 @@ class DashboardController {
             value: 1,
           },
         },
-      ]);
+      ]),
 
       // Get exams taken per day of the week for activity chart
-      const userActivityData = await ExamSession.aggregate([
+      ExamSession.aggregate([
         {
-          $match: { userId: user._id },
+          $match: {
+            userId: user._id,
+            startTime: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+          },
         },
         {
           $group: {
@@ -178,21 +212,40 @@ class DashboardController {
           },
         },
         { $sort: { _id: 1 } },
-      ]);
+      ]),
+    ]);
 
-      // Combine all the collected data into a single object
-      const dashboardData = {
-        name: user.name,
-        practiceQuestions: user.practiceQuestionCount,
-        correctAnswers: user.correctAnswers,
-        examTaken,
-        averagePercentage,
-        recentActivity,
-        examChartData,
-        userActivityData,
-      };
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
 
-      res.status(200).json(dashboardData);
+    const userActivityData = days.map((day, index) => ({
+      name: day,
+      examTaken:
+        userActivity.find((item) => item._id === index + 1)?.examTaken ?? 0,
+    }));
+
+    const averagePercentage = averagePercentageData[0]?.averagePercentage || 0;
+
+    // Combine all the collected data into a single object
+    const dashboardData = {
+      name: user.name,
+      practiceQuestions: user.practiceQuestionCount,
+      correctAnswers: user.correctAnswers,
+      examTaken,
+      averagePercentage,
+      recentActivity,
+      examChartData,
+      userActivityData,
+    };
+
+    res.status(200).json(dashboardData);
   };
 }
 

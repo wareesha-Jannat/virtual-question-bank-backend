@@ -10,6 +10,7 @@ const getUserIdFromRefreshToken = (refreshToken) => {
     const decodedToken = jwt.decode(refreshToken);
     return decodedToken?._id || null; // Extract and return the `_id` field from the payload
   } catch (error) {
+    console.log(error)
     return null; // Return null in case of an error
   }
 };

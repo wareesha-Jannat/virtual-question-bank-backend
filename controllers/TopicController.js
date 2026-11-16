@@ -3,140 +3,151 @@ import Subject from "../models/Subject.js";
 import Question from "../models/Question.js";
 import { sendNotification } from "../utils/sendNotification.js";
 import Activity from "../models/Activity.js";
+import mongoose from "mongoose";
 
 class TopicController {
   //Get Topics
   static getTopics = async (req, res) => {
-   
-      const { subjectId } = req.query;
+    const { subjectId } = req.query;
 
-      if (!subjectId) {
-        res.status(400).json({
-          message: "Subject is required",
-        });
-      }
+    if (!subjectId) {
+      return res.status(400).json({
+        message: "Subject is required",
+      });
+    }
 
-      let topics = await Topic.find({ subjectId }).populate("subjectId").lean();
+    let topics = await Topic.find({ subjectId }).populate("subjectId").lean();
 
-      if (!topics || topics.length === 0) {
-        return res
-          .status(404)
-          .json({ message: "No topics found for this subject" });
-      }
+    if (!topics || topics.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No topics found for this subject" });
+    }
 
-      // 2. Count questions for each topic
-      const topicIds = topics.map((t) => t._id);
-      const questionCounts = await Question.aggregate([
-        { $match: { topicId: { $in: topicIds } } },
-        { $group: { _id: "$topicId", count: { $sum: 1 } } },
-      ]);
+    // 2. Count questions for each topic
+    const topicIds = topics.map((t) => t._id);
+    const questionCounts = await Question.aggregate([
+      { $match: { topicId: { $in: topicIds } } },
+      { $group: { _id: "$topicId", count: { $sum: 1 } } },
+    ]);
 
-      const countMap = Object.fromEntries(
-        questionCounts.map((qc) => [qc._id.toString(), qc.count])
-      );
+    const countMap = Object.fromEntries(
+      questionCounts.map((qc) => [qc._id.toString(), qc.count]),
+    );
 
-      // 3. Attach questionCount to all topics (including those with 0)
-      topics = topics.map((topic) => ({
-        ...topic,
-        questionCount: countMap[topic._id.toString()] || 0,
-      }));
+    // 3. Attach questionCount to all topics (including those with 0)
+    topics = topics.map((topic) => ({
+      ...topic,
+      questionCount: countMap[topic._id.toString()] || 0,
+    }));
 
-      // 4. Sort by questionCount descending
-      topics.sort((a, b) => b.questionCount - a.questionCount);
+    // 4. Sort by questionCount descending
+    topics.sort((a, b) => b.questionCount - a.questionCount);
 
-      res.status(200).json(topics);
-   
+    return res.status(200).json(topics);
   };
 
   //Adding new Topic
   static addTopic = async (req, res) => {
-   
-      const { subjectId, topic } = req.body;
+    const { subjectId, topic } = req.body;
 
-      //Checking if input fields are empty
-      if (!subjectId || !topic) {
-        return res
-          .status(400)
-          .json({ message: "Subject and Topic are required" });
-      }
+    //Checking if input fields are empty
+    if (!subjectId || !topic) {
+      return res
+        .status(400)
+        .json({ message: "Subject and Topic are required" });
+    }
 
-      //Checking if subject exists
-      const subject = await Subject.findById(subjectId);
+    //Checking if subject exists
+    const subject = await Subject.findById(subjectId);
 
-      if (!subject) {
-        return res.status(404).json({ message: "Subject not found" });
-      }
-      //Checking if the topic exists
-      const existingTopic = await Topic.findOne({ name: topic });
+    if (!subject) {
+      return res.status(404).json({ message: "Subject not found" });
+    }
+    //Checking if the topic exists
+    const existingTopic = await Topic.findOne({ name: topic, subjectId });
 
-      if (existingTopic) {
-        return res.status(404).json({ message: "topic already exists" });
-      }
-      //Adding new topic
-      const newTopic = new Topic({
-        name: topic,
-        subjectId: subjectId,
-      });
-      await newTopic.save();
+    if (existingTopic) {
+      return res.status(409).json({ message: "topic already exists" });
+    }
+    //Adding new topic
+    const newTopic = new Topic({
+      name: topic,
+      subjectId: subjectId,
+    });
+    await newTopic.save();
 
-      //send notification
-      const title = "Topic Added";
-      const message = `A new topic "${newTopic.name}" is added to subject "${subject.name}" `;
-      const receiver = "users";
-      await sendNotification({ title, message, receiver });
+    //send notification
+    const title = "Topic Added";
+    const message = `A new topic "${newTopic.name}" is added to subject "${subject.name}" `;
+    const receiver = "users";
+    await sendNotification({ title, message, receiver });
 
-      // update activity
-      const activity = new Activity({
-        user: req.user._id,
-        role: req.user.role,
-        action: "User added new Topic",
-      });
+    // update activity
+    const activity = new Activity({
+      user: req.user._id,
+      role: req.user.role,
+      action: "User added new Topic",
+    });
 
-      // Save the activity to the database
-      await activity.save();
-      res.status(201).json({
-        message: "Topic added Successfully",
-        newTopic,
-        subjectId,
-      });
-  
+    // Save the activity to the database
+    await activity.save();
+    res.status(201).json({
+      message: "Topic added Successfully",
+      newTopic,
+      subjectId,
+    });
   };
 
   //Deleting topic
 
   static deleteTopic = async (req, res) => {
-   
-      const { topicId } = req.params;
+    const { topicId } = req.params;
 
-      //Checking if the topic exists
-      const topic = await Topic.findOne({ _id: topicId });
+    //Checking if the topic exists
+    const topic = await Topic.findOne({ _id: topicId });
 
-      if (!topic) {
-        return res.status(404).json({
-          message: "topic Does not exist",
-        });
-      }
-
-      //Deleting topic
-      await Topic.deleteOne({ _id: topicId });
-      await Question.deleteMany({ topicId });
-
-      //Activity
-      const activity = new Activity({
-        user: req.user._id,
-        role: req.user.role,
-        action: "User deleted a topic",
+    if (!topic) {
+      return res.status(404).json({
+        message: "topic Does not exist",
       });
+    }
 
-      // Save the activity to the database
-      await activity.save();
-
-      return res.status(200).json({
-        message: "topic and its related questions are deleted Successfully",
-        topicId: topic._id,
-        subjectId: topic.subjectId,
+    const session = await mongoose.startSession();
+    //Deleting topic
+    try {
+      await session.withTransaction(async () => {
+        //Delete Questions
+        await Question.deleteMany({ topicId }, { session });
+        //Delete Topics
+        await Topic.deleteOne({ _id: topicId }, { session });
+        //Save activity
+        await Activity.create([
+          {
+            user: req.user._id,
+            role: req.user.role,
+            action: "User deleted a topic",
+          }],
+          { session },
+        );
       });
-  
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+        status: false,
+        message: "Internal server error",
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    //Activity
+
+    return res.status(200).json({
+      message: "topic and its related questions are deleted Successfully",
+      topicId: topic._id,
+      subjectId: topic.subjectId,
+    });
   };
 }
 export default TopicController;

@@ -26,20 +26,89 @@ import AnalyticsAndReportingRouter from "./routes/analyticsAndReporting.js";
 import ResultRouter from "./routes/results.js";
 import SupportRequestRouter from "./routes/supportRequests.js";
 import ExamSessionRouter from "./routes/examSessions.js";
+import mongoose from "mongoose";
+
+// Start Server
+
+let server;
+let isShuttingDown = false;
+let shutDownTimer;
+let cronTask;
+let shutDownExitCode = 0;
+
+//Gracefull shutdown
+
+const gracefulShutdown = (signal, exitCode = 0) => {
+  if (isShuttingDown) {
+    if (exitCode !== 0) {
+      shutDownExitCode = 1;
+    }
+    return;
+  }
+
+  isShuttingDown = true;
+  shutDownExitCode = exitCode;
+  
+  console.log(`${signal} received. Closing server gracefully...`);
+
+  // Force exit after 10 seconds if connections are stuck
+  shutDownTimer = setTimeout(() => {
+    console.error(
+      "Could not close connections in time, forcefully shutting down",
+    );
+    process.exit(1);
+  }, 10000);
+
+  //Stop cron job
+  cronTask?.stop();
+  const closeDatabaseAndExit = async () => {
+    try {
+      await mongoose.connection.close();
+    } catch (error) {
+      console.error("Error closing Database", error);
+      shutDownExitCode = 1;
+    }
+    clearTimeout(shutDownTimer);
+    process.exit(shutDownExitCode);
+  };
+
+  if (!server) {
+    closeDatabaseAndExit();
+    return;
+  }
+
+  server.close((error) => {
+    if (error) {
+      console.error("Error closing HTTP server:", error);
+      shutDownExitCode = 1;
+    } else {
+      console.log("HTTP server closed.");
+    }
+    closeDatabaseAndExit();
+  });
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("UNHANDLED REJECTION! 💥 Shutting down...");
+  console.error(reason);
+
+  gracefulShutdown("unhandledRejection", 1);
+});
 
 //Handle unCaught exception
 process.on("uncaughtException", (err) => {
   console.error("UNCAUGHT EXCEPTION! 💥 Shutting down...");
   console.error(err.name, err.message, err.stack);
-  process.exit(1);
+  gracefulShutdown("uncaughtException", 1);
 });
 
 const app = express();
 const port = process.env.PORT || 5000;
 const DATABASE_URL = process.env.DB_URL;
-
-// DB Connection
-connectDb(DATABASE_URL);
 
 //Middlewares
 
@@ -68,18 +137,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(passport.initialize());
 
-// Cron Job
-cron.schedule("0 0 * * *", async () => {
-  try {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    await User.updateMany(
-      { lastLogin: { $lt: thirtyDaysAgo } },
-      { isActive: false },
-    );
-  } catch (error) {}
-});
-
 // Routes
 app.use("/subjects", subjectRouter);
 app.use("/topics", topicRouter);
@@ -102,35 +159,33 @@ app.use((req, res, next) => {
 });
 
 app.use(globalErrorHandler);
-// Start Server
-const server = app.listen(port, "0.0.0.0", () => {
-  console.log(`Server running on port ${port}`);
-});
 
-// Graceful Shutdown
-const gracefulShutdown = (signal) => {
-  console.log(`${signal} received. Closing server gracefully...`);
-  server.close(() => {
-    console.log("Server closed. Exiting process.");
-    process.exit(0);
-  });
+//Start Server
 
-  // Force exit after 10 seconds if connections are stuck
-  setTimeout(() => {
-    console.error(
-      "Could not close connections in time, forcefully shutting down",
-    );
+const startServer = async () => {
+  try {
+    await connectDb(DATABASE_URL);
+    server = app.listen(port, "0.0.0.0", () => {
+      console.log("Server running");
+    });
+  } catch (err) {
+    console.error("unable to start server", err);
     process.exit(1);
-  }, 10000);
+  }
 };
 
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-
-// Handle unhandled promise rejections
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("UNHANDLED REJECTION! 💥 Shutting down...");
-  console.error(reason);
-
-  gracefulShutdown("unhandledRejection");
+// Cron Job
+cronTask = cron.schedule("0 0 * * *", async () => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    await User.updateMany(
+      { lastLogin: { $lt: thirtyDaysAgo } },
+      { isActive: false },
+    );
+  } catch (error) {
+    console.error("Error in cron job", error);
+  }
 });
+
+await startServer();

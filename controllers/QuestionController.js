@@ -132,10 +132,15 @@ class QuestionController {
     const { page = 1, limit = 10, search = "", subjectId = "" } = req.query;
     const numericLimit = parseInt(limit);
     const skip = (page - 1) * numericLimit;
+    let escapedSearch;
+
+    if (search) {
+      escapedSearch = search?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") || "";
+    }
 
     const query = {
       createdBy,
-      ...(search && { questionText: { $regex: search, $options: "i" } }),
+      ...(search && { questionText: { $regex: escapedSearch, $options: "i" } }),
       ...(subjectId && { subjectId }),
     };
 
@@ -173,11 +178,16 @@ class QuestionController {
         .json({ message: "subjectId and topicId are required" });
     }
     const pageSize = 5;
+    let escapedSearch;
+
+    if (search) {
+      escapedSearch = search?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") || "";
+    }
 
     const query = {
       topicId,
       subjectId,
-      ...(search && { questionText: { $regex: search, $options: "i" } }),
+      ...(search && { questionText: { $regex: escapedSearch, $options: "i" } }),
       ...(difficulty && { difficultyLevel: difficulty }),
       ...(cursor && {
         _id: { $lt: new mongoose.Types.ObjectId(String(cursor)) },
@@ -242,17 +252,28 @@ class QuestionController {
 
     //Creating question data object
     const questionData = {
-      questionText,
-      questionType,
-      correctAnswer,
-      difficultyLevel,
-      subjectId: subject,
-      topicId: topic,
-      explanation,
+      $set: {
+        questionText,
+        questionType,
+        correctAnswer,
+        difficultyLevel,
+        subjectId: subject,
+        topicId: topic,
+        explanation,
+      },
+      $unset: {},
     };
     //Options field will only be included if the type of question is MCQ
     if (questionType === "MCQ") {
-      questionData.options = options;
+      questionData.$set.options = options;
+
+      questionData.$unset = { keywords: "" };
+    }
+
+    if (questionType === "Descriptive") {
+      questionData.$set.keywords =
+        QuestionController.extractKeywords(correctAnswer);
+      questionData.$unset = { options: "" };
     }
 
     // Find the question by ID and update it
@@ -331,7 +352,7 @@ class QuestionController {
 
       // Determine if the answer is correct based on the number of matched keywords
       // Here, we assume an answer is correct if it contains at 50 percent of the keywords
-      const keywordMatchThreshold = question.keywords.length / 2;
+      const keywordMatchThreshold = Math.floor(question.keywords.length / 2);
       isCorrect = matchedKeywords.length >= keywordMatchThreshold;
     }
 
@@ -349,9 +370,11 @@ class QuestionController {
     // Save the updated question
     await question.save();
     //updating practice question count
+    await User.findByIdAndUpdate(
+      { _id: user._id },
+      { $inc: { practiceQuestionCount: 1 } },
+    );
 
-    user.practiceQuestionCount += 1;
-    await user.save();
     // Send response back with evaluation result
     res.status(200).json({ isCorrect: isCorrect });
   };

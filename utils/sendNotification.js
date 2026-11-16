@@ -22,24 +22,28 @@ export const sendNotification = async ({
       // Fetch users based on their roles (e.g., Admin or Student)
       const users = await User.find({ role: receiver }, "_id");
       recipientIds = users.map((user) => user._id);
+      if (userId) {
+        recipientIds.push(userId);
+      }
     }
+    //if receiver is a specific Person(student or admin) + all users of other role(admin or student)
     // If neither a userId nor a receiver is specified, throw an error
     else {
       throw new Error(
-        "You must specify either a userId or a receiver to send a notification."
+        "You must specify either a userId or a receiver to send a notification.",
       );
     }
 
-    // Create the new notification
-    const newNotification = new Notification({
-      title,
-      message,
-      receiverId: recipientIds,
-    });
-
-    // Save the notification to the database
-    await newNotification.save();
+    // Store one notification per recipient so each user has an independent read state.
+    await Notification.insertMany(
+      recipientIds.map((recipientId) => ({
+        title,
+        message,
+        receiverId: recipientId?._id ?? recipientId,
+      })),
+    );
   } catch (error) {
+    console.log(error);
     throw error;
   }
 };

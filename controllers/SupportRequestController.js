@@ -19,7 +19,7 @@ class SupportRequestController {
     }
 
     // Find all admins
-    const admins = await User.find({ role: "Admin" });
+    const admins = await User.find({ role: "Admin" }).select("_id");
 
     if (admins.length === 0) {
       return res.status(404).json({
@@ -76,6 +76,12 @@ class SupportRequestController {
     const userId = req.user._id;
     const { cursor = null, search = "" } = req.query;
     const pageSize = 5;
+    let escapedSearch;
+
+    if (search) {
+      escapedSearch = search?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") || "";
+    }
+
     const query = {
       userId,
       ...(cursor && {
@@ -83,8 +89,8 @@ class SupportRequestController {
       }),
       ...(search && {
         $or: [
-          { subject: { $regex: search, $options: "i" } },
-          { message: { $regex: search, $options: "i" } },
+          { subject: { $regex: escapedSearch, $options: "i" } },
+          { message: { $regex: escapedSearch, $options: "i" } },
         ],
       }),
     };
@@ -145,6 +151,12 @@ class SupportRequestController {
     const userId = req.user._id;
     const { cursor = null, search = "" } = req.query;
     const pageSize = 5;
+    let escapedSearch;
+
+    if (search) {
+      escapedSearch = search?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") || "";
+    }
+
     const query = {
       respondedAdminId: userId,
       ...(cursor && {
@@ -152,8 +164,8 @@ class SupportRequestController {
       }),
       ...(search && {
         $or: [
-          { subject: { $regex: search, $options: "i" } },
-          { message: { $regex: search, $options: "i" } },
+          { subject: { $regex: escapedSearch, $options: "i" } },
+          { message: { $regex: escapedSearch, $options: "i" } },
         ],
       }),
     };
@@ -188,7 +200,6 @@ class SupportRequestController {
       respondedAdminId: null,
     }).populate("userId", "name"); //populate user info
 
-    // Combine both responded and new requests into one object
     const result = {
       newRequests,
     };
@@ -204,31 +215,50 @@ class SupportRequestController {
     const userId = req.user._id;
 
     // Find the support request by ID
-    const supportRequest = await SupportRequest.findById(requestId);
 
-    if (!supportRequest) {
+    const updatedRequest = await SupportRequest.findOneAndUpdate(
+      {
+        _id: requestId,
+        respondedAdminId: null,
+        status: "pending",
+      },
+      {
+        $set: {
+          responseText,
+          respondedAdminId: userId,
+          status: "responded",
+        },
+      },
+      { new: true, runValidators: true },
+    );
+
+    if (!updatedRequest) {
       return res.status(404).json({ message: "Support request not found" });
     }
 
-    // Update the support request with response text, responded admin ID, and status
-    supportRequest.responseText = responseText; // Save the response text
-    supportRequest.respondedAdminId = userId; // Save the ID of the responding admin
-    supportRequest.status = "Responded"; // Update the status
-
-    // Save the updated support request
-    await supportRequest.save();
-    const updatedRequest = await SupportRequest.findById(requestId)
-      .populate("userId", "name")
-      .populate("respondedAdminId", "name")
-      .lean();
+    await updatedRequest.populate([
+      {
+        path: "userId",
+        select: "name",
+      },
+      {
+        path: "respondedAdminId",
+        select: "name",
+      },
+    ]);
 
     // Create a notification message with subject and topic names
     const title = "Support request Responded";
-    const message = `Admin ${req.user.name} has responded to a support request`;
+    const message = `Admin ${updatedRequest.respondedAdminId.name} has responded to a support request`;
     const receiver = "Admin";
 
     // Send notification
-    await sendNotification({ title, message, receiver });
+    await sendNotification({
+      title,
+      message,
+      receiver,
+      userId: updatedRequest.userId,
+    });
 
     // create activity
     const activity = new Activity({

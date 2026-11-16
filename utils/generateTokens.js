@@ -29,6 +29,7 @@ const generateTokens = async(user) => {
   // Return the generated tokens and their expiration times
     return {accessToken, refreshToken, accessTokenExp, refreshTokenExp}
   } catch (error) {
+    console.log(error)
     throw error;
   }
 }

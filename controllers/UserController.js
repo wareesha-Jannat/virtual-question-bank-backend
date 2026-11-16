@@ -8,10 +8,11 @@ import { sendNotification } from "../utils/sendNotification.js";
 import SupportRequest from "../models/SupportRequest.js";
 import Activity from "../models/Activity.js";
 import crypto from "crypto";
-import jwt from "jsonwebtoken";
 import validator from "validator";
 import { Resend } from "resend";
 import PasswordResetToken from "../models/PasswordResetToken.js";
+import mongoose from "mongoose";
+import Result from "../models/Result.js";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -90,18 +91,13 @@ class UserController {
       });
     }
     //Check user
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found",
       });
     }
-
-    //updating last Login field
-    user.lastLogin = new Date();
-    user.isActive = true; // Set isActive to true on login
-    await user.save();
 
     //Check password
     const isMatch = await bcrypt.compare(password, user.password);
@@ -136,6 +132,10 @@ class UserController {
 
     // Save the activity to the database
     await activity.save();
+    //updating last Login field
+    user.lastLogin = new Date();
+    user.isActive = true; // Set isActive to true on login
+    await user.save();
 
     //Sending response
     res.status(200).json({
@@ -158,8 +158,14 @@ class UserController {
     }
 
     //find user
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).select("+password  role");
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
     //Check password
     const isMatch = await bcrypt.compare(oldPassword, user.password);
 
@@ -191,6 +197,7 @@ class UserController {
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     //Update user password
+
     await User.findByIdAndUpdate(user._id, {
       $set: {
         password: hashedPassword,
@@ -198,7 +205,7 @@ class UserController {
     });
 
     const activity = new Activity({
-      user: user, // Link the activity to the new user
+      user: user._id, // Link the activity to the new user
       role: user.role,
       action: "User Changed password",
     });
@@ -206,15 +213,20 @@ class UserController {
     // Save the activity to the database
     await activity.save();
 
+    await UserRefreshTokenModel.deleteOne({ userId: user._id });
+    res.clearCookie("accessToken");
+    res.clearCookie("refreshToken");
+
     res.status(200).json({
-      success: false,
+      success: true,
       message: "Password changed successfully",
     });
   };
 
   //Profile or Logged-in user
   static userProfile = async (req, res) => {
-    res.json({ user: req.user });
+    const user = await User.findById(req.user._id);
+    res.json({ user });
   };
   //user role
   static userRole = async (req, res) => {
@@ -235,7 +247,7 @@ class UserController {
       }
 
       // Find user by email
-      const user = await User.findOne({ email });
+      const user = await User.findOne({ email }).select("email name");
 
       if (!user) {
         return res.status(404).json({
@@ -261,6 +273,13 @@ class UserController {
       // Reset link
       const resetLink = `${process.env.FRONTEND_HOST}/account/reset-password-confirm/${user._id}/${rawToken}`;
 
+      // Store token in DB only AFTER successful email send
+      await PasswordResetToken.create({
+        userId: user._id,
+        token: hashedToken,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+      });
+
       // Send password reset email
       const { error } = await resend.emails.send({
         from: "onboarding@resend.dev",
@@ -284,13 +303,6 @@ class UserController {
           message: "Failed to send reset email. Try again later.",
         });
       }
-
-      // Store token in DB only AFTER successful email send
-      await PasswordResetToken.create({
-        userId: user._id,
-        token: hashedToken,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
-      });
 
       return res.status(200).json({
         success: true,
@@ -327,10 +339,10 @@ class UserController {
       }
 
       // Find user
-      const user = await User.findById(id);
+      const user = await User.findById(id).select("_id");
 
       if (!user) {
-        return res.status(404).json({
+        return res.json({
           success: false,
           message: "User not found",
         });
@@ -426,7 +438,7 @@ class UserController {
     }
 
     //check if user already exist
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email }).select("email");
     if (existingUser) {
       return res.status(409).json({
         success: false,
@@ -448,13 +460,14 @@ class UserController {
     await sendNotification({ title, message, userId: newcomer._id });
 
     // Generate token for password reset
-    const secret = newUser._id + process.env.JWT_ACCESS_TOKEN_SECRET_KEY;
-    const token = jwt.sign({ userID: newUser._id }, secret, {
-      expiresIn: "15m",
-    });
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
 
     // Generate reset link
-    const resetLink = `${process.env.FRONTEND_HOST}/account/reset-password-confirm/${newUser._id}/${token}`;
+    const resetLink = `${process.env.FRONTEND_HOST}/account/reset-password-confirm/${newUser._id}/${rawToken}`;
 
     // Send password reset email
     const { error } = await resend.emails.send({
@@ -475,6 +488,11 @@ class UserController {
         message: error.message,
       });
     }
+    await PasswordResetToken.create({
+      userId: newUser._id,
+      token: hashedToken,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    });
     const activity = new Activity({
       user: req.user._id, // Link the activity to the new user
       role: req.user.role,
@@ -496,18 +514,38 @@ class UserController {
   //Get users
 
   static getUsers = async (req, res) => {
-    const { page = 1, limit = 10, search = "", role = "" } = req.query;
+    const { search = "", role = "" } = req.query;
 
-    const numericLimit = parseInt(limit);
-    const skip = (page - 1) * numericLimit;
+    const pageNumber = Number(req.query.page ?? 1);
+    const numericLimit = Number(req.query.limit ?? 5);
+    console.log("search, role, pageNumber, limit", req.query);
+    if (
+      !Number.isInteger(pageNumber) ||
+      pageNumber < 1 ||
+      !Number.isInteger(numericLimit) ||
+      numericLimit < 1 ||
+      numericLimit > 10
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pagination parameters",
+      });
+    }
+
+    const skip = (pageNumber - 1) * numericLimit;
+    let escapedSearch;
+
+    if (search) {
+      escapedSearch = search?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") || "";
+    }
 
     const query = {
-      ...(search && { name: { $regex: search, $options: "i" } }),
+      ...(search && { name: { $regex: escapedSearch, $options: "i" } }),
       ...(role && { role }),
     };
 
     const users = await User.find(query)
-      .select("-password ")
+      .select("name email role isActive ")
       .skip(skip)
       .limit(numericLimit)
       .sort({ createdAt: -1 });
@@ -516,7 +554,7 @@ class UserController {
 
     res.status(200).json({
       totalPages: Math.ceil(total / numericLimit),
-      currentPage: Number(page),
+      currentPage: Number(pageNumber),
       users,
     });
   };
@@ -568,6 +606,13 @@ class UserController {
     const { userId } = req.params;
     const { name, email, age, gender } = req.body;
 
+    if (req.user._id.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
+
     //checking required fields
     if (!name || !email) {
       return res.status(400).json({
@@ -579,7 +624,7 @@ class UserController {
     const updatedInfo = await User.findByIdAndUpdate(
       userId,
       { name, email, age, gender },
-      { new: true, runValidators: true, select: "-password" },
+      { new: true, runValidators: true },
     );
     const title = "Profile updated";
     const message = "Your profile has updated successfully";
@@ -599,30 +644,51 @@ class UserController {
       updatedInfo,
     });
   };
+
   //Delete Account
   static deleteAccount = async (req, res) => {
     const { userId } = req.params;
-    const user = await User.findById(userId);
+
+    if (req.user._id.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
+
+    const user = await User.findById(userId).select("_id");
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found",
       });
     }
+    const session = await mongoose.startSession();
 
-    // Update all questions created by the user
-    await Question.updateMany(
-      { createdBy: userId },
-      { $set: { createdBy: null } },
-    );
+    try {
+      await session.withTransaction(async () => {
+        // Update all questions created by the user
+        await Question.updateMany(
+          { createdBy: userId },
+          { $set: { createdBy: null } },
+          { session },
+        );
+        //Deleting  support requests
+        await SupportRequest.deleteMany({ userId }, { session });
+        //Delete user refresh token from database
+        await UserRefreshTokenModel.findOneAndDelete({ userId }, { session });
 
-    await User.deleteOne({ _id: userId });
-
-    //Deleting  support requests
-    await SupportRequest.deleteMany({ userId });
-
-    //Delete user refresh token from database
-    await UserRefreshTokenModel.findOneAndDelete({ userId });
+        //Delete user
+        await User.deleteOne({ _id: userId }, { session });
+      });
+    } catch {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to delete account, please try again later",
+      });
+    } finally {
+      await session.endSession();
+    }
 
     // Clear access token and refresh cookies
     res.clearCookie("accessToken");
@@ -646,7 +712,8 @@ class UserController {
   //Delete User
   static deleteUser = async (req, res) => {
     const { userId } = req.params;
-    const user = await User.findById(userId);
+
+    const user = await User.findById(userId).select("_id");
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -654,16 +721,33 @@ class UserController {
       });
     }
 
-    // Update all questions created by the user
-    await Question.updateMany(
-      { createdBy: userId },
-      { $set: { createdBy: null } },
-    );
+    const session = await mongoose.startSession();
 
-    await User.deleteOne({ _id: userId });
+    try {
+      await session.withTransaction(async () => {
+        // Update all questions created by the user
+        await Question.updateMany(
+          { createdBy: userId },
+          { $set: { createdBy: null } },
+          { session },
+        );
+        //Deleting  support requests
+        await SupportRequest.deleteMany({ userId }, { session });
 
-    //Deleting  support requests
-    await SupportRequest.deleteMany({ userId: userId });
+        await UserRefreshTokenModel.deleteOne({ userId }, { session });
+
+        //Delete user
+        await User.deleteOne({ _id: userId }, { session });
+      });
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to delete account, please try again later",
+      });
+    } finally {
+      await session.endSession();
+    }
 
     const activity = new Activity({
       user: req.user._id,

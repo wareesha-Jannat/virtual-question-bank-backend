@@ -34,9 +34,9 @@ class NotificationController {
     const userId = req.user._id;
     const { notificationId } = req.params;
     const updatedNotification = await Notification.findByIdAndUpdate(
-      notificationId,
+      { _id: notificationId, receiverId: userId },
       {
-        $addToSet: { isReadBy: userId }, //addtoset adds value if it does not exist already
+        $set: { isReadBy: true },
       },
       { new: true },
     );
@@ -50,9 +50,9 @@ class NotificationController {
 
   static checkUnreadNotifications = async (req, res) => {
     const userId = req.user._id;
-    const hasUnread = await Notification.exists({
+    const hasUnread = await Notification.exists({  //return doc's id if match exist otherwise null
       receiverId: userId,
-      isReadBy: { $nin: [userId] }, // Check if the `isReadBy` array does NOT include the userId
+      isReadBy: false,
     });
 
     res.status(200).json({ hasUnread: !!hasUnread }); // `!!` converts the result to a boolean

@@ -16,19 +16,11 @@ let opts = {
 
 passport.use(
   new JwtStrategy(opts, async function (jwt_payload, done) {
-    try {
-      const user = await User.findOne({ _id: jwt_payload._id }).select(
-        "-password"
-      ); // Find the user in the database using the '_id' extracted from the JWT payload.
-
-      if (user) {
-        return done(null, user); // If the user is found, return the user object
-      } else {
-        return done(null, false);
-      }
-    } catch (error) {
-      // If an error occurs during the database query, return the error
-      return done(error, false);
-    }
-  })
+    console.log(jwt_payload._id, jwt_payload.role);
+    return done(null, {
+      _id: jwt_payload._id,
+      role: jwt_payload.role,
+    }); // If the user is found, return the user object
+  }),
 );
+//done means i am done working here wheather it is a success or failure

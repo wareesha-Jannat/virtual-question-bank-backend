@@ -7,7 +7,7 @@ const supportRequestSchema = new mongoose.Schema({
     subject : {type : String, required : true },
     message : {type: String, required : true},
     responseText : {type: String},
-    status : {type: String, required : true},
+    status : {type: String, enum : ["pending", "responded"], default : "pending"},
 }, {timestamps : true});
  const SupportRequest = mongoose.model("SupportRequest", supportRequestSchema);
  export default SupportRequest;

@@ -4,9 +4,14 @@ import mongoose from "mongoose";
 class ResultController {
   //getResult
   static getResultsByUser = async (req, res) => {
-    const userId = req.user._id;
+    const userId = new mongoose.Types.ObjectId(req.user._id);
     const { cursor = null, search = "" } = req.query;
     const pageSize = 10;
+    let escapedSearch;
+
+    if (search) {
+      escapedSearch = search?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") || "";
+    }
 
     // Cursor filter
     const cursorFilter = cursor
@@ -21,9 +26,6 @@ class ResultController {
       // Step 2: Sort by newest first
       { $sort: { _id: -1 } },
 
-      // Step 3: Limit +1 to check if there is a next page
-      { $limit: pageSize + 1 },
-
       // Step 4: Join ExamSession
       {
         $lookup: {
@@ -35,48 +37,31 @@ class ResultController {
       },
       { $unwind: "$examSession" },
 
-      // Step 5: Join Subject
-      {
-        $lookup: {
-          from: "subjects",
-          localField: "examSession.subjectId",
-          foreignField: "_id",
-          as: "subject",
-        },
-      },
-      { $unwind: "$subject" },
-
       // Step 6: Optional search filter
       ...(search
         ? [
             {
               $match: {
-                "subject.name": { $regex: search, $options: "i" },
+                "examSession.subjectName": {
+                  $regex: escapedSearch,
+                  $options: "i",
+                },
               },
             },
           ]
         : []),
+      { $limit: pageSize + 1 },
 
-      // Step 7: Join topics
-      {
-        $lookup: {
-          from: "topics",
-          localField: "examSession.topicList",
-          foreignField: "_id",
-          as: "topics",
-        },
-      },
-
-      // Step 8: Project only fields needed for frontend
+      // Step 7: Project only fields needed for frontend
       {
         $project: {
           resultId: "$_id",
           examSessionId: "$examSession._id",
-          subjectName: "$subject.name",
+          subjectName: "$examSession.subjectName",
           date: 1,
           isPass: 1,
           percentage: 1,
-          topics: "$topics.name",
+          topics: "$examSession.topicNames",
         },
       },
     ];
@@ -95,7 +80,7 @@ class ResultController {
     const nextCursor = hasMore
       ? finalResults[finalResults.length - 1].resultId.toString()
       : null;
-
+    console.log(finalResults);
     return res.status(200).json({
       results: finalResults,
       nextCursor,
@@ -106,21 +91,11 @@ class ResultController {
   static getSingleResult = async (req, res) => {
     const { resultId } = req.params;
 
-    const populatedResult = await Result.findOne({ _id: resultId })
+    const populatedResult = await Result.findOne({ _id: resultId, userId : new mongoose.Types.ObjectId(req.user._id) })
       .populate({
         path: "examSessionId",
         select:
-          "totalQuestions timeTaken duration difficulty topicList subjectId",
-        populate: [
-          {
-            path: "subjectId",
-            select: "name",
-          },
-          {
-            path: "topicList",
-            select: "name",
-          },
-        ],
+          "totalQuestions timeTaken duration difficulty subjectName topicNames",
       })
       .populate({ path: "userId", select: "name" });
 
@@ -131,12 +106,12 @@ class ResultController {
   static getDetailResult = async (req, res) => {
     const { id: examSessionId } = req.params;
 
-    const exam = await ExamSession.findById(examSessionId)
-      .populate({
-        path: "questions.questionId",
-        select: "questionText options questionType correctAnswer explanation",
-      })
-      .select("startTime endTime questions");
+    // No populate needed — all question data (text, options, correctAnswer, explanation)
+    // is embedded as a snapshot inside the questions[] array
+    const exam = await ExamSession.findOne({
+      _id: examSessionId,
+      userId: req.user._id,
+    }).select("startTime endTime questions");
 
     res.status(200).json(exam);
   };

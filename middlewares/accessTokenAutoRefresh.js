@@ -28,6 +28,7 @@ const accessTokenAutoRefresh = async (req, res, next) => {
       return next(); // Access token is valid, move to the next middleware
     }
 
+    //now if access token is not present or is expired
     //Check if the refresh token exists
     if (!refreshToken) {
       return unauthorizedResponse(res);

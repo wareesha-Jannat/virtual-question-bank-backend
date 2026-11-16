@@ -33,10 +33,9 @@ const questionSchema = new mongoose.Schema(
     lastAttempted: { type: Date, default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
-questionSchema.index({ topicId: 1 });
-questionSchema.index({ subjectId: 1 });
+
 questionSchema.index({ subjectId: 1, topicId: 1 });
 
 const Question = mongoose.model("Question", questionSchema);

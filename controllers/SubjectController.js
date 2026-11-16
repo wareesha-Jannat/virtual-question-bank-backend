@@ -3,6 +3,7 @@ import Subject from "../models/Subject.js";
 import Activity from "../models/Activity.js";
 import Topic from "../models/Topic.js";
 import { sendNotification } from "../utils/sendNotification.js";
+import mongoose from "mongoose";
 
 class SubjectController {
   //Create New Subject
@@ -98,6 +99,34 @@ class SubjectController {
       });
     }
 
+    const session = await mongoose.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        await Subject.deleteOne({ _id: subjectId }, { session });
+        await Topic.deleteMany({ subjectId: subjectId }, { session });
+        await Question.deleteMany({ subjectId: subjectId }, { session });
+
+        //store activity
+        const activity = new Activity({
+          user: req.user._id,
+          role: req.user.role,
+          action: "User deleted a Subject",
+        });
+
+        // Save the activity to the database
+        await activity.save({ session });
+      });
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    } finally {
+      await session.endSession();
+    }
+
     //send notification
     const title = "Subject deleted";
     const message = `${req.user.role} deleted subject "${subject.name}"  `;
@@ -105,19 +134,7 @@ class SubjectController {
 
     await sendNotification({ title, message, receiver });
     //Deleting Subject
-    await Subject.deleteOne({ _id: subjectId });
-    await Topic.deleteMany({ subjectId: subjectId });
-    await Question.deleteMany({ subjectId: subjectId });
 
-    //store activity
-    const activity = new Activity({
-      user: req.user._id,
-      role: req.user.role,
-      action: "User deleted a Subject",
-    });
-
-    // Save the activity to the database
-    await activity.save();
     res.status(200).json({
       message:
         "Subject its topics and related questions are deleted Successfully",

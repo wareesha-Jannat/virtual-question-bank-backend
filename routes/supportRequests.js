@@ -3,12 +3,14 @@ import SupportRequestController from "../controllers/SupportRequestController.js
 import passport from "passport";
 import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import authorizedRoles from "../middlewares/authorizeRoles.js";
 const router = express.Router();
 
 router.post(
   "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
+  authorizedRoles("Admin", "Student"),
   asyncHandler(SupportRequestController.createSupportRequest),
 );
 
@@ -16,6 +18,7 @@ router.delete(
   "/:id",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
+  authorizedRoles("Admin"),
   asyncHandler(SupportRequestController.deleteRequest),
 );
 
@@ -23,15 +26,16 @@ router.get(
   "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
-  asyncHandler((req, res)=>{
-    const {type} = req.query;
-    if(type === "new"){
-      return SupportRequestController.getNewRequests(req, res)
+  authorizedRoles("Admin", "Student"),
+  asyncHandler((req, res) => {
+    const { type } = req.query;
+    if (type === "new") {
+      return SupportRequestController.getNewRequests(req, res);
     }
-    if(type === "responded"){
-      return SupportRequestController.getUserRespondedRequests(req, res)
+    if (type === "responded") {
+      return SupportRequestController.getUserRespondedRequests(req, res);
     }
-    return SupportRequestController.getUserSupportRequests(req, res)
+    return SupportRequestController.getUserSupportRequests(req, res);
   }),
 );
 
@@ -39,6 +43,7 @@ router.patch(
   "/:id",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
+  authorizedRoles("Admin"),
   asyncHandler(SupportRequestController.respondToSupportRequest),
 );
 

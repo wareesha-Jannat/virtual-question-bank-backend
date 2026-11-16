@@ -4,6 +4,7 @@ const router = express.Router();
 import passport from "passport";
 import accessTokenAutoRefresh from "../middlewares/accessTokenAutoRefresh.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import authorizedRoles from "../middlewares/authorizeRoles.js";
 
 //Public Route
 router.get("/", asyncHandler(TopicController.getTopics));
@@ -13,12 +14,14 @@ router.post(
   "/",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
+  authorizedRoles("Admin"),
   asyncHandler(TopicController.addTopic),
 );
 router.delete(
   "/:topicId",
   accessTokenAutoRefresh,
   passport.authenticate("jwt", { session: false }),
+  authorizedRoles("Admin"),
   asyncHandler(TopicController.deleteTopic),
 );
 
